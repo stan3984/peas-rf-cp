@@ -30,4 +30,12 @@ impl Id {
     pub fn into_u64(self) -> u64 {
         self.0
     }
+
+    /// returns the number of leading common/equal bits between this
+    /// `Id` and another one.
+    #[inline]
+    pub fn common_bits(&self, other: &Id) -> u32 {
+        (self.0 ^ other.0).leading_zeros()
+    }
+
 }
