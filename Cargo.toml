@@ -4,3 +4,4 @@ version = "0.0.0"
 authors = []
 
 [dependencies]
+rand = "^0.6"
