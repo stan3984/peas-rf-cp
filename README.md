@@ -11,11 +11,11 @@ cargo build
 ## how to run a client
 
 ```sh
-cargo run
+cargo run --bin client
 ```
 
 ## how to run a tracker
 
 ```sh
-:(){ :|: & };:
+cargo run --bin tracker -- ip port
 ```
