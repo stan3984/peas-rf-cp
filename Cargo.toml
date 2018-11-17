@@ -4,4 +4,6 @@ version = "0.0.0"
 authors = []
 
 [dependencies]
+log = "^0.4"
 rand = "^0.6"
+simple-logging = "^2.0"
