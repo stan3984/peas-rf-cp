@@ -7,3 +7,15 @@ authors = []
 log = "^0.4"
 rand = "^0.6"
 simple-logging = "^2.0"
+
+[lib]
+name = "peas_rf_cp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "client"
+path = "src/node/main.rs"
+
+[[bin]]
+name = "tracker"
+path = "src/tracker/main.rs"

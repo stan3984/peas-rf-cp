@@ -1,17 +1,13 @@
-#![allow(dead_code)]
 
-extern crate log;
-extern crate rand;
-extern crate simple_logging;
+extern crate peas_rf_cp;
 
-mod common;
-
-use common::logger;
+use peas_rf_cp::common::logger;
 
 fn main() {
     logger::init(logger::LevelFilter::Debug);
     log::debug!("Hello, world!");
 
+    println!("main started");
     // magic goes here
 
     log::debug!("Shutting down application...");
