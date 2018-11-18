@@ -19,10 +19,12 @@ pub fn init(level: LevelFilter) -> Option<Result<()>> {
 }
 
 fn init0(level: LevelFilter) -> Result<()> {
-    let name = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(dur) => format!("peas-{:?}.log", dur.as_secs()),
+    let suffix = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(dur) => dur.to_string(),
         Err(_) => String::from("unknown")
     };
+
+    let filename = format!("peas-{}.log", suffix);
     
-    simple_logging::log_to_file(name, level)
+    simple_logging::log_to_file(filename, level)
 }
