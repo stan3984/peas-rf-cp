@@ -54,8 +54,8 @@ fn receiver(myself: SocketAddr) {
 
     let mut buffer = [0; 1024];
 
-    println!("sleeping...");
-    std::thread::sleep(std::time::Duration::from_millis(10000));
+    // println!("sleeping...");
+    // std::thread::sleep(std::time::Duration::from_millis(10000));
 
     println!("receiving...");
     let (_amount, src) = socket.recv_from(&mut buffer).unwrap();

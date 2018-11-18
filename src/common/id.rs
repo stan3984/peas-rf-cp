@@ -1,7 +1,7 @@
 use rand::RngCore;
 
 /// 64-bit unsigned integer used a unique identifier.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize, Deserialize)]
 pub struct Id(u64);
 
 impl Id {
