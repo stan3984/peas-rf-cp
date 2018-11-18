@@ -11,9 +11,12 @@ struct Data(HashMap<Id, Vec<Boot>>);
 
 /// data stored in the tracker
 struct Boot {
-    adr: SocketAddr, /// address to a entry node
-    ttl: SystemTime, /// the time the entry was added
-    counter: u32, /// strictly increasing counter to act as an id for every boot
+    /// address to a entry node
+    adr: SocketAddr,
+    /// the time the entry was added
+    ttl: SystemTime,
+    /// strictly increasing counter to act as an id for every boot
+    counter: u32,
 }
 
 impl PartialEq for Boot {
