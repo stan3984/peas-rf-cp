@@ -7,6 +7,9 @@ authors = []
 log = "^0.4"
 rand = "^0.6"
 simple-logging = "^2.0"
+serde = "^1.0"
+serde_derive = "^1.0"
+bincode = "^1.0"
 
 [lib]
 name = "peas_rf_cp"
@@ -14,8 +17,8 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "client"
-path = "src/node/main.rs"
+path = "src/client_main.rs"
 
 [[bin]]
 name = "tracker"
-path = "src/tracker/main.rs"
+path = "src/tracker_main.rs"
