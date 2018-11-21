@@ -20,7 +20,7 @@ pub fn init(level: LevelFilter) -> Option<Result<()>> {
 
 fn init0(level: LevelFilter) -> Result<()> {
     let suffix = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(dur) => dur.to_string(),
+        Ok(dur) => dur.as_secs().to_string(),
         Err(_) => String::from("unknown")
     };
 
