@@ -2,10 +2,12 @@ use pnet::datalink::interfaces;
 use std::net::{IpAddr::V4, Ipv4Addr, SocketAddr, IpAddr};
 use std::{error::Error, fmt};
 use rand::Rng;
+use std::io::{self, Read};
 
 pub mod udp;
 
 /// random network error
+// TODO: make more specific variants
 #[derive(Debug)]
 pub struct NetworkError;
 
@@ -17,6 +19,13 @@ impl fmt::Display for NetworkError {
     }
 }
 
+impl From<io::Error> for NetworkError {
+    fn from(error: io::Error) -> Self {
+       NetworkError
+    }
+}
+
+// TODO: cache?
 /// finds the first best `Ipv4Addr` to use
 pub fn find_internet_interface() -> Result<Ipv4Addr, NetworkError> {
     let ifaces = interfaces();

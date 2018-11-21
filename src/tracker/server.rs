@@ -3,8 +3,9 @@ use std::net::{UdpSocket,SocketAddr};
 use common::id::Id;
 use std::collections::HashMap;
 use std::time::{Duration,SystemTime};
-use super::TrackQuery;
+use super::{TrackResp,TrackQuery};
 use bincode::{serialize, deserialize};
+use network::udp;
 
 /// maps room ids to several entry (bootstrap) nodes
 struct Data(HashMap<Id, Vec<Boot>>);
@@ -101,14 +102,19 @@ pub fn start_from_tup(address: ([u8; 4], u16)) {
     start(SocketAddr::from(address));
 }
 
+// TODO: bara ge port och hitta locala addressen själv med network::find_internet_interface?
 pub fn start(address: SocketAddr) {
-    // let mut data: Data = HashMap::new();
+    let mut data = Data::new();
     let mut counter: u32 = 0;
-    // update(&mut data, &mut counter, Id::from_u64(0), address);
+
+    let sock = UdpSocket::bind(address).expect("couldn't bind socket");
+
+    loop {
+        let (sender, query): (_, TrackQuery) = udp::recv_until(&sock).unwrap();
+        // handle the request
+        udp::send(&sock, &TrackResp::LookupAns{adr: None, lookup_id: 2}, sender).unwrap();
+    }
+
 }
 
-fn socket_reader(address: SocketAddr) {
-    let socket = UdpSocket::bind(address).unwrap();
-    
-}
 
