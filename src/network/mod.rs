@@ -6,28 +6,54 @@ use std::io::{self, Read};
 
 pub mod udp;
 
-/// random network error
-// TODO: make more specific variants
-#[derive(Debug)]
-pub struct NetworkError;
+type Result<T> = std::result::Result<T, NetworkError>;
 
-impl Error for NetworkError {}
+/// random network error
+#[derive(Debug)]
+pub enum NetworkError {
+    IOError(io::Error),
+    NoMessage,
+    Timeout,
+    Other(&'static str),
+}
+
+impl Error for NetworkError {
+    fn description(&self) -> &str {
+        match *self {
+            NetworkError::IOError(ref e) => e.description(),
+            NetworkError::NoMessage => "the received packet was not meant for us",
+            NetworkError::Timeout => "the receiving timed out",
+            NetworkError::Other(ref s) => s,
+            // _ => "some random network error",
+        }
+    }
+
+    fn cause(&self) -> Option<&Error> {
+        match *self {
+            NetworkError::IOError(ref e) => Some(e),
+            _ => None,
+        }
+    }
+}
 
 impl fmt::Display for NetworkError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Oh no, something bad went down")
+        match *self {
+            NetworkError::IOError(ref e) => e.fmt(f),
+            _ => write!(f, "NetworkError: {}", self.description()),
+        }
     }
 }
 
 impl From<io::Error> for NetworkError {
     fn from(error: io::Error) -> Self {
-       NetworkError
+       NetworkError::IOError(error)
     }
 }
 
 // TODO: cache?
 /// finds the first best `Ipv4Addr` to use
-pub fn find_internet_interface() -> Result<Ipv4Addr, NetworkError> {
+pub fn find_internet_interface() -> Result<Ipv4Addr> {
     let ifaces = interfaces();
     for i in ifaces.iter() {
         if ! i.is_loopback() && i.is_up() {
@@ -38,7 +64,7 @@ pub fn find_internet_interface() -> Result<Ipv4Addr, NetworkError> {
             }
         }
     }
-    Err(NetworkError)
+    Err(NetworkError::Other("couldn't find an available interface"))
 }
 
 /// returns `num` connection candidates, consisting of `adr` and a random port.
