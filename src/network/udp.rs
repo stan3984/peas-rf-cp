@@ -5,14 +5,37 @@ use serde::ser::Serialize;
 use serde::de::DeserializeOwned;
 use bincode::{serialize,deserialize};
 use std::io;
-use super::NetworkError;
+use super::*;
+use std::time::{Duration,Instant};
 
-pub fn send_with_responses(sock: &UdpSocket, msgs: &HashMap<SocketAddr, &[u8]>, retries: i32) -> HashMap<SocketAddr, Vec<u8>> {
-   HashMap::new()
+// pub fn send_with_responses(sock: &UdpSocket, msgs: &HashMap<SocketAddr, &[u8]>, retries: u32) -> HashMap<SocketAddr, Vec<u8>> {
+//    HashMap::new()
+// }
+
+/// sends `msg` to `dst` and waits for a response with type `U`.
+/// attempts this `retries` times before returning NetworkError::Timeout
+pub fn send_with_response<T, U, A>(sock: &UdpSocket, msg: &T, dst: SocketAddr, retries: u32) -> Result<U>
+where T: Serialize,
+      U: DeserializeOwned
+{
+    let mut tryy = 1;
+    loop {
+        send(sock, msg, &dst)?;
+        match recv_until_timeout_from(sock, Duration::from_millis(500), dst) {
+            Ok((_, x)) => return Ok(x),
+            Err(NetworkError::Timeout) => (),
+            Err(ioerror) => return Err(ioerror),
+        }
+        if tryy >= retries {
+            return Err(NetworkError::Timeout)
+        }
+        tryy += 1;
+    }
 }
 
 /// open a socket on any port for udp
-pub fn open_any() -> Result<UdpSocket, NetworkError> {
+/// Tries on a couple of different ports before failing
+pub fn open_any() -> Result<UdpSocket> {
    let my_adr = super::find_internet_interface()?;
    let cons = super::get_connection_candidates(my_adr, 5);
    Ok(UdpSocket::bind(&cons[..])?)
@@ -20,41 +43,101 @@ pub fn open_any() -> Result<UdpSocket, NetworkError> {
 
 /// this is basically a wrapper around UdpSocket::send_to that takes something that is
 /// serializable instead of a slice of bytes.
-pub fn send<T, A>(sock: &UdpSocket, msg: &T, to: A) -> Result<usize, NetworkError>
+pub fn send<T, A>(sock: &UdpSocket, msg: &T, to: A) -> Result<usize>
 where T: Serialize,
       A: ToSocketAddrs
 {
     Ok(sock.send_to(serialize(msg).expect("could not serialize msg").as_slice(), to)?)
 }
 
-/// TRIES to read ONE packet from the socket
-/// abides to the same rules as UdpSocket::recv_from()
-pub fn recv_once<T>(sock: &UdpSocket) -> Result<(SocketAddr, T), NetworkError>
+/// tries to read ONE packet from the socket
+/// doesn't set its own rules for the socket
+/// returns: Ok((sender, message)) if a message was found/received
+///          Err(NetworkError::NoMessage) if the message received was not what we expected
+///          Err(NetworkError::Timeout) if it timed out or if socket is in nonblocking and was empty
+///          Err(NetworkError::IOError(e)) if a serious error occured
+pub fn recv_once<T>(sock: &UdpSocket) -> Result<(SocketAddr, T)>
 where T: DeserializeOwned
 {
     let mut buf = Vec::with_capacity(512);
-    let (read, sender) = sock.recv_from(&mut buf)?;
+    let (read, sender) = sock.recv_from(&mut buf)
+        .map_err(|e| {
+            if let io::ErrorKind::WouldBlock = e.kind() {
+                NetworkError::Timeout
+            } else if let io::ErrorKind::TimedOut = e.kind() {
+                NetworkError::Timeout
+            } else {
+                NetworkError::from(e)
+            }
+        })?;
     if read >= buf.len() {
-        return Err(NetworkError);
+        // TODO: log this
+        return Err(NetworkError::NoMessage);
     }
 
     let de = match deserialize(&buf) {
         Ok(res) => res,
-        Err(_) => return Err(NetworkError),
+        // TODO: also log this
+        Err(_) => return Err(NetworkError::NoMessage),
     };
 
     Ok((sender, de))
 }
 
 /// runs `recv_once` until it returns something successful
-pub fn recv_until<T>(sock: &UdpSocket) -> Result<(SocketAddr, T), NetworkError>
+/// sets sock to blocking
+pub fn recv_until_msg<T>(sock: &UdpSocket) -> Result<(SocketAddr, T)>
 where T: DeserializeOwned
 {
+    set_blocking(sock)?;
     loop {
         match recv_once(sock) {
             Ok(x) => return Ok(x),
-            // TODO: very bad, check against more specific errors
-            Err(_) => (),
+            Err(NetworkError::NoMessage) | Err(NetworkError::Timeout) => (),
+            ioerror => return ioerror,
         }
     }
+}
+
+/// runs `recv_once` over and over up to `timeout` seconds.
+/// only accepting packets from `filter` that can be deserialized to T
+/// changes settings on sock
+/// returns NetworkError::Timeout if `timeout` ran out (not exact!)
+pub fn recv_until_timeout_from<T>(sock: &UdpSocket, timeout: Duration, filter: SocketAddr) -> Result<(SocketAddr, T)>
+where T: DeserializeOwned
+{
+    set_timeout(sock, timeout/10)?;
+    let start = Instant::now();
+    loop {
+        match recv_once(sock) {
+            Ok((sender, data)) => {
+                if sender == filter {
+                    return Ok((sender, data))
+                }
+            },
+            Err(NetworkError::NoMessage) | Err(NetworkError::Timeout) => (),
+            ioerror => return ioerror,
+        }
+        if Instant::now().duration_since(start) >= timeout {
+            return Err(NetworkError::Timeout);
+        }
+    }
+}
+
+pub fn set_nonblocking(sock: &UdpSocket) -> io::Result<()> {
+    sock.set_nonblocking(true)
+}
+
+/// set the specified timeout on the socket
+pub fn set_timeout(sock: &UdpSocket, dur: Duration) -> io::Result<()> {
+    sock.set_nonblocking(false)?;
+    sock.set_read_timeout(Some(dur))?;
+    Ok(())
+}
+
+/// set socket to blocking
+pub fn set_blocking(sock: &UdpSocket) -> io::Result<()> {
+    sock.set_nonblocking(false)?;
+    sock.set_read_timeout(None)?;
+    Ok(())
 }

@@ -1,5 +1,5 @@
 
-use std::net::{UdpSocket,SocketAddr};
+use std::net::{IpAddr,UdpSocket,SocketAddr};
 use common::id::Id;
 use std::collections::HashMap;
 use std::time::{Duration,SystemTime};
@@ -67,7 +67,7 @@ impl Data {
     /// `counter` is the counter of the previously looked up node for room `id`,
     /// This makes sure that we aren't returning the same node twice.
     /// If this is the first lookup for `id`, then use `counter` = 0.
-    /// If there aren't any nodes left in the "database", then `Nonde` is returned.
+    /// If there aren't any nodes left in the "database", then `None` is returned.
     fn lookup(&self, id: Id, counter: u32) -> Option<(SocketAddr, u32)> {
         if let Some(ref x) = self.0.get(&id) {
             for ele in x.iter() {
@@ -80,41 +80,72 @@ impl Data {
     }
 
     /// remove everything older than `thres`
-    fn remove_old(&mut self, thres: Duration, now: SystemTime) {
+    /// returns the systime of the oldest entry
+    fn remove_old(&mut self, thres: Duration, now: SystemTime) -> Option<SystemTime> {
+        let mut oldest = None;
         self.0.retain(|_, ref mut val| {
             val.retain(|ref boot| {
                 if let Ok(dur) = now.duration_since(boot.ttl) {
-                    dur <= thres
+                    if dur > thres {
+                        false
+                    } else {
+                        if oldest.is_none() || boot.ttl < oldest.unwrap() {
+                            oldest = Some(boot.ttl);
+                        }
+                        true
+                    }
                 } else {
                     // there isn't really anything sensible to do if
                     // `duration_since` fails, so just ignore it and
                     // keep the entry
+                    // TODO: log it
                     true
                 }
             });
             !val.is_empty()
         });
+        oldest
     }
 }
 
-/// start_from_tup(([127,0,0,1], 8080))
-pub fn start_from_tup(address: ([u8; 4], u16)) {
-    start(SocketAddr::from(address));
-}
-
-// TODO: bara ge port och hitta locala addressen själv med network::find_internet_interface?
-pub fn start(address: SocketAddr) {
+pub fn start(port: u16, ttl: u64) {
     let mut data = Data::new();
     let mut counter: u32 = 0;
+    let mut oldest_sys_time = SystemTime::now();
+    let boot_ttl = Duration::from_secs(ttl);
 
-    let sock = UdpSocket::bind(address).expect("couldn't bind socket");
+    let my_ip = ::network::find_internet_interface().expect("couldn't find a suitable interface, are you even connected to a network?");
+    let sock = UdpSocket::bind(SocketAddr::new(IpAddr::from(my_ip), port)).expect("couldn't bind socket, is the port already in use?");
+
+    udp::set_blocking(&sock).unwrap();
+
+    println!("Tracker started on {}:{} with entry ttl {}s", my_ip, port, ttl);
 
     loop {
-        let (sender, query): (_, TrackQuery) = udp::recv_until(&sock).unwrap();
-        // handle the request
-        udp::send(&sock, &TrackResp::LookupAns{adr: None, lookup_id: 2}, sender).unwrap();
-    }
+        let (sender, query): (_, TrackQuery) = udp::recv_until_msg(&sock).unwrap();
 
+        match query {
+            TrackQuery::Update{id, adr} => {
+                data.update(&mut counter, id, adr);
+                println!("{} wants to update {}, counter is now {}", sender, id, counter);
+                udp::send(&sock, &TrackResp::UpdateSuccess{id: id, ttl: boot_ttl}, sender).unwrap();
+            }
+            TrackQuery::Lookup{id, last_lookup} => {
+                let (boot_adr, boot_cnt) = data.lookup(id, last_lookup).map_or((None, 0), |(a,c)| (Some(a),c));
+                println!("{} wants to lookup {} with ll={}. We returned {:?} with ll={}", sender, id, last_lookup, boot_adr, boot_cnt);
+                udp::send(&sock, &TrackResp::LookupAns{adr: boot_adr, lookup_id: boot_cnt}, sender).unwrap();
+            }
+        }
+
+        let now = SystemTime::now();
+        if let Ok(dur) = now.duration_since(oldest_sys_time) {
+            if dur > boot_ttl {
+                println!("removing old stuffs...");
+                oldest_sys_time = data.remove_old(boot_ttl, now).unwrap_or(now);
+                println!("done!");
+            }
+        }
+    }
 }
 
 
