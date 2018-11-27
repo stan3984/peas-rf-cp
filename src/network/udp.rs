@@ -14,14 +14,15 @@ use std::time::{Duration,Instant};
 
 /// sends `msg` to `dst` and waits for a response with type `U`.
 /// attempts this `retries` times before returning NetworkError::Timeout
-pub fn send_with_response<T, U, A>(sock: &UdpSocket, msg: &T, dst: SocketAddr, retries: u32) -> Result<U>
+pub fn send_with_response<T, U, F>(sock: &UdpSocket, msg: &T, dst: SocketAddr, retries: u32, total_time: Duration, pred: F) -> Result<U>
 where T: Serialize,
-      U: DeserializeOwned
+      U: DeserializeOwned,
+      F: Fn(&U) -> bool
 {
     let mut tryy = 1;
     loop {
         send(sock, msg, &dst)?;
-        match recv_until_timeout_from(sock, Duration::from_millis(500), dst) {
+        match recv_until_timeout_from(sock, total_time, dst, &pred) {
             Ok((_, x)) => return Ok(x),
             Err(NetworkError::Timeout) => (),
             Err(ioerror) => return Err(ioerror),
@@ -103,15 +104,17 @@ where T: DeserializeOwned
 /// only accepting packets from `filter` that can be deserialized to T
 /// changes settings on sock
 /// returns NetworkError::Timeout if `timeout` ran out (not exact!)
-pub fn recv_until_timeout_from<T>(sock: &UdpSocket, timeout: Duration, filter: SocketAddr) -> Result<(SocketAddr, T)>
-where T: DeserializeOwned
+/// only returns an Ok if `pred` returns true on the received message
+pub fn recv_until_timeout_from<T, F>(sock: &UdpSocket, timeout: Duration, filter: SocketAddr, pred: F) -> Result<(SocketAddr, T)>
+where T: DeserializeOwned,
+      F: Fn(&T) -> bool
 {
     set_timeout(sock, timeout/10)?;
     let start = Instant::now();
     loop {
         match recv_once(sock) {
             Ok((sender, data)) => {
-                if sender == filter {
+                if sender == filter && pred(&data) {
                     return Ok((sender, data))
                 }
             },

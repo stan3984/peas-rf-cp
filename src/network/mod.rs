@@ -6,7 +6,7 @@ use std::io::{self, Read};
 
 pub mod udp;
 
-type Result<T> = std::result::Result<T, NetworkError>;
+pub type Result<T> = std::result::Result<T, NetworkError>;
 
 /// random network error
 #[derive(Debug)]

@@ -2,7 +2,7 @@
 use std::net::{IpAddr,UdpSocket,SocketAddr};
 use common::id::Id;
 use std::collections::HashMap;
-use std::time::{Duration,SystemTime};
+use std::time::{Duration,Instant};
 use super::{TrackResp,TrackQuery};
 use bincode::{serialize, deserialize};
 use network::udp;
@@ -15,7 +15,7 @@ struct Boot {
     /// address to a entry node
     adr: SocketAddr,
     /// the time the entry was added
-    ttl: SystemTime,
+    ttl: Instant,
     /// strictly increasing counter to act as an id for every boot
     counter: u32,
 }
@@ -30,7 +30,7 @@ impl Boot {
     /// add a new boot
     fn new(adr: SocketAddr, counter: &mut u32) -> Boot {
         *counter += 1;
-        Boot {adr: adr, ttl: SystemTime::now(), counter: *counter}
+        Boot {adr: adr, ttl: Instant::now(), counter: *counter}
     }
 }
 
@@ -51,7 +51,7 @@ impl Data {
             let mut contained = false;
             for ele in x.iter_mut() {
                 if ele.adr == adr {
-                    ele.ttl = SystemTime::now();
+                    ele.ttl = Instant::now();
                     contained = true;
                     break;
                 }
@@ -81,24 +81,17 @@ impl Data {
 
     /// remove everything older than `thres`
     /// returns the systime of the oldest entry
-    fn remove_old(&mut self, thres: Duration, now: SystemTime) -> Option<SystemTime> {
+    fn remove_old(&mut self, thres: Duration, now: Instant) -> Option<Instant> {
         let mut oldest = None;
         self.0.retain(|_, ref mut val| {
             val.retain(|ref boot| {
-                if let Ok(dur) = now.duration_since(boot.ttl) {
-                    if dur > thres {
-                        false
-                    } else {
-                        if oldest.is_none() || boot.ttl < oldest.unwrap() {
-                            oldest = Some(boot.ttl);
-                        }
-                        true
-                    }
+                let dur = now.duration_since(boot.ttl);
+                if dur > thres {
+                    false
                 } else {
-                    // there isn't really anything sensible to do if
-                    // `duration_since` fails, so just ignore it and
-                    // keep the entry
-                    // TODO: log it
+                    if oldest.is_none() || boot.ttl < oldest.unwrap() {
+                        oldest = Some(boot.ttl);
+                    }
                     true
                 }
             });
@@ -111,7 +104,7 @@ impl Data {
 pub fn start(port: u16, ttl: u64) {
     let mut data = Data::new();
     let mut counter: u32 = 0;
-    let mut oldest_sys_time = SystemTime::now();
+    let mut oldest_sys_time = Instant::now();
     let boot_ttl = Duration::from_secs(ttl);
 
     let my_ip = ::network::find_internet_interface().expect("couldn't find a suitable interface, are you even connected to a network?");
@@ -137,14 +130,14 @@ pub fn start(port: u16, ttl: u64) {
             }
         }
 
-        let now = SystemTime::now();
-        if let Ok(dur) = now.duration_since(oldest_sys_time) {
-            if dur > boot_ttl {
-                println!("removing old stuffs...");
-                oldest_sys_time = data.remove_old(boot_ttl, now).unwrap_or(now);
-                println!("done!");
-            }
+        let now = Instant::now();
+        let dur = now.duration_since(oldest_sys_time);
+        if dur > boot_ttl {
+            println!("removing old stuffs...");
+            oldest_sys_time = data.remove_old(boot_ttl, now).unwrap_or(now);
+            println!("done!");
         }
+
     }
 }
 

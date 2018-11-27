@@ -42,3 +42,12 @@ enum TrackResp {
         lookup_id: u32,
     }
 }
+
+impl TrackResp {
+    pub fn is_lookup(&self) -> bool {
+        match self {
+            TrackResp::LookupAns{..} => true,
+            _ => false,
+        }
+    }
+}
