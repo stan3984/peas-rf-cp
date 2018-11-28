@@ -1,19 +1,24 @@
 use std::mem;
+use std::net::SocketAddr;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
 
 use log;
 use node::util;
 
-#[derive(Debug, Clone, Copy)]
-enum ToNetMsg {
-    Terminate,
+use net::fromnetmsg::FromNetMsg;
+use net::tonetmsg::ToNetMsg;
+
+#[derive(Debug, Clone)]
+pub enum SendError {
+    Disconnected(ToNetMsg),
+    Dropped(ToNetMsg),
 }
 
 pub struct NetHandle {
     join_handle: JoinHandle<()>,
     channel_in: Option<Sender<ToNetMsg>>,
-    channel_out: Option<Receiver<u8>>,
+    channel_out: Option<Receiver<FromNetMsg>>,
 }
 
 impl NetHandle {
@@ -83,15 +88,33 @@ impl NetHandle {
     /// Sends a message requesting termination of the
     /// underlying thread.
     #[inline]
-    pub fn send_terminate(&mut self) {
+    pub fn send_terminate(&mut self) -> Result<(), SendError> {
         self.send_message(ToNetMsg::Terminate)
     }
 
-    fn send_message(&mut self, msg: ToNetMsg) {
+    /// Sends a message updating the username.
+    #[inline]
+    pub fn send_set_username(&mut self, username: String) -> Result<(), SendError> {
+        self.send_message(ToNetMsg::SetUsername(username))
+    }
+
+    /// Registers a new tracker to this client.
+    #[inline]
+    pub fn send_register_tracker(&mut self, socket: SocketAddr) -> Result<(), SendError> {
+        self.send_message(ToNetMsg::RegisterTracker(socket))
+    }
+
+    /// Removes a registered tracker from this client.
+    #[inline]
+    pub fn send_unregister_tracker(&mut self, socket: SocketAddr) -> Result<(), SendError> {
+        self.send_message(ToNetMsg::UnregisterTracker(socket))
+    }
+
+    fn send_message(&mut self, msg: ToNetMsg) -> Result<(), SendError> {
         match self.channel_in {
             Some(ref tx) => {
                 match tx.send(msg) {
-                    Ok(_) => {}
+                    Ok(x) => Ok(x),
                     Err(se) => {
                         // this only happens when the receiving end has
                         // disconnected in which case data will never be
@@ -100,13 +123,17 @@ impl NetHandle {
                             "Failed to send message `{:?}`: receiver has been disconnected",
                             se.0
                         );
+                        Err(SendError::Disconnected(se.0))
                     }
                 }
             }
-            None => log::error!(
-                "Failed to send message `{:?}`: sender has been dropped",
-                msg
-            ),
+            None => {
+                log::error!(
+                    "Failed to send message `{:?}`: sender has been dropped",
+                    msg
+                );
+                Err(SendError::Dropped(msg))
+            }
         }
     }
 }
