@@ -1,5 +1,5 @@
 /target
-**/*.rs.bk
-Cargo.lock
-.dir-locals.el
-/*.log
+*.rs.bk
+/Cargo.lock
+/.dir-locals.el
+*.log
