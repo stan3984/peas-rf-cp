@@ -40,7 +40,7 @@ impl<'a> LookupSession<'a> {
                 return Ok(Some(adr));
             }
         } else {
-            // TODO: log, shouldn't happen
+            error!("if_lookup must be incorrect!!");
         }
         Ok(None)
     }
@@ -60,7 +60,7 @@ pub fn update(sock: &UdpSocket, room: Id, my_adr: SocketAddr, tracker: SocketAdd
     if let TrackResp::UpdateSuccess{ttl, ..} = resp {
         return Ok(ttl);
     } else {
-        // TODO: log, shouldn't happen
+        error!("if_update must be incorrect!!");
     }
     Err(NetworkError::Other("update api failed for some reason (should never happen)"))
 }

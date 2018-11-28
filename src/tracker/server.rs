@@ -4,7 +4,6 @@ use common::id::Id;
 use std::collections::HashMap;
 use std::time::{Duration,Instant};
 use super::{TrackResp,TrackQuery};
-use bincode::{serialize, deserialize};
 use network::udp;
 
 /// maps room ids to several entry (bootstrap) nodes
@@ -109,6 +108,13 @@ impl Data {
     }
 }
 
+fn prtmadr(ma: Option<SocketAddr>) -> String {
+    match ma {
+        None => "None".to_string(),
+        Some(ip) => ip.to_string(),
+    }
+}
+
 pub fn start(port: u16, ttl: u64) {
     let mut data = Data::new();
     let mut counter: u32 = 0;
@@ -120,7 +126,7 @@ pub fn start(port: u16, ttl: u64) {
 
     udp::set_blocking(&sock).unwrap();
 
-    println!("Tracker started on {}:{} with entry ttl {}s", my_ip, port, ttl);
+    info!("Tracker started on {}:{} with entry ttl {}s", my_ip, port, ttl);
 
     loop {
         let (sender, query): (_, TrackQuery) = udp::recv_until_msg(&sock).unwrap();
@@ -128,12 +134,12 @@ pub fn start(port: u16, ttl: u64) {
         match query {
             TrackQuery::Update{id, adr} => {
                 data.update(&mut counter, id, adr);
-                println!("{} wants to update {}, counter is now {}", sender, id, counter);
+                debug!("{} wants to update {}, counter is now {}", sender, id, counter);
                 udp::send(&sock, &TrackResp::UpdateSuccess{id: id, ttl: boot_ttl}, sender).unwrap();
             }
             TrackQuery::Lookup{id, last_lookup} => {
                 let (boot_adr, boot_cnt) = data.lookup(id, last_lookup).map_or((None, 0), |(a,c)| (Some(a),c));
-                println!("{} wants to lookup {} with ll={}. We returned {:?} with ll={}", sender, id, last_lookup, boot_adr, boot_cnt);
+                debug!("{} wants to lookup {} with ll={}. We returned {} with ll={}", sender, id, last_lookup, prtmadr(boot_adr), boot_cnt);
                 udp::send(&sock, &TrackResp::LookupAns{adr: boot_adr, lookup_id: boot_cnt}, sender).unwrap();
             }
         }
@@ -142,13 +148,12 @@ pub fn start(port: u16, ttl: u64) {
         let dur = now.duration_since(oldest_sys_time);
         if dur > boot_ttl {
             let len_before = data.length();
-            println!("removing old stuffs...");
+            debug!("removing old stuffs...");
             oldest_sys_time = data.remove_old(boot_ttl, now).unwrap_or(now);
             let len_after = data.length();
-            println!("done! {} were removed, {} remain", len_before - len_after, len_after);
+            debug!("done! {} were removed, {} remain", len_before - len_after, len_after);
         }
 
     }
 }
-
 

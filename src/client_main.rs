@@ -9,8 +9,8 @@ use std::net::ToSocketAddrs;
 use peas_rf_cp::common::id::Id;
 
 fn main() {
-    // logger::init(logger::LevelFilter::Debug);
-    // log::debug!("Hello, world!");
+    logger::init_file();
+    // log::info!("Hello, world!");
 
     // uppdatera oss själva för att sedan lista alla som tracker vet om
 

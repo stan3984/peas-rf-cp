@@ -72,14 +72,16 @@ where T: DeserializeOwned
             }
         })?;
     if read >= buf.len() {
-        // TODO: log this
+        warn!("received a message that was too big {} >= {}", read, buf.len());
         return Err(NetworkError::NoMessage);
     }
 
     let de = match deserialize(&buf[..read]) {
         Ok(res) => res,
-        // TODO: also log this
-        Err(_) => return Err(NetworkError::NoMessage),
+        Err(_) => {
+            warn!("received a message that couldn't be deserialized");
+            return Err(NetworkError::NoMessage)
+        },
     };
 
     Ok((sender, de))
