@@ -50,4 +50,10 @@ impl TrackResp {
             _ => false,
         }
     }
+    pub fn is_update(&self) -> bool {
+        match self {
+            TrackResp::UpdateSuccess{..} => true,
+            _ => false,
+        }
+    }
 }
