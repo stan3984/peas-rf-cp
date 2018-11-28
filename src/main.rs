@@ -5,6 +5,7 @@ extern crate rand;
 extern crate simple_logging;
 
 mod common;
+mod node;
 
 use common::logger;
 
