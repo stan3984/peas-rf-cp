@@ -60,7 +60,7 @@ where T: Serialize,
 pub fn recv_once<T>(sock: &UdpSocket) -> Result<(SocketAddr, T)>
 where T: DeserializeOwned
 {
-    let mut buf = Vec::with_capacity(512);
+    let mut buf = [0; 512];
     let (read, sender) = sock.recv_from(&mut buf)
         .map_err(|e| {
             if let io::ErrorKind::WouldBlock = e.kind() {
@@ -76,7 +76,7 @@ where T: DeserializeOwned
         return Err(NetworkError::NoMessage);
     }
 
-    let de = match deserialize(&buf) {
+    let de = match deserialize(&buf[..read]) {
         Ok(res) => res,
         // TODO: also log this
         Err(_) => return Err(NetworkError::NoMessage),
