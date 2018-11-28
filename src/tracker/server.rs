@@ -99,6 +99,14 @@ impl Data {
         });
         oldest
     }
+
+    fn length(&self) -> usize {
+        let mut res = 0;
+        for v in self.0.values() {
+            res += v.len();
+        }
+        res
+    }
 }
 
 pub fn start(port: u16, ttl: u64) {
@@ -133,9 +141,11 @@ pub fn start(port: u16, ttl: u64) {
         let now = Instant::now();
         let dur = now.duration_since(oldest_sys_time);
         if dur > boot_ttl {
+            let len_before = data.length();
             println!("removing old stuffs...");
             oldest_sys_time = data.remove_old(boot_ttl, now).unwrap_or(now);
-            println!("done!");
+            let len_after = data.length();
+            println!("done! {} were removed, {} remain", len_before - len_after, len_after);
         }
 
     }
