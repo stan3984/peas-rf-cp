@@ -7,6 +7,7 @@ use log;
 use node::util;
 
 use net::fromnetmsg::FromNetMsg;
+use net::netthread;
 use net::tonetmsg::ToNetMsg;
 
 #[derive(Debug, Clone)]
@@ -34,8 +35,7 @@ impl NetHandle {
         };
 
         let jhandle = thread::spawn(move || {
-            let _a = chan_out_send;
-            let _b = chan_in_recv;
+            netthread::run(chan_in_recv, chan_out_send);
         });
 
         NetHandle {
@@ -85,28 +85,27 @@ impl NetHandle {
         self.channel_out.is_some()
     }
 
-    /// Sends a message requesting termination of the
-    /// underlying thread.
+    /// Requests termination of the underlying thread.
     #[inline]
-    pub fn send_terminate(&mut self) -> Result<(), SendError> {
+    pub fn terminate(&mut self) -> Result<(), SendError> {
         self.send_message(ToNetMsg::Terminate)
     }
 
-    /// Sends a message updating the username.
+    /// Updates the username.
     #[inline]
-    pub fn send_set_username(&mut self, username: String) -> Result<(), SendError> {
+    pub fn set_username(&mut self, username: String) -> Result<(), SendError> {
         self.send_message(ToNetMsg::SetUsername(username))
     }
 
     /// Registers a new tracker to this client.
     #[inline]
-    pub fn send_register_tracker(&mut self, socket: SocketAddr) -> Result<(), SendError> {
+    pub fn register_tracker(&mut self, socket: SocketAddr) -> Result<(), SendError> {
         self.send_message(ToNetMsg::RegisterTracker(socket))
     }
 
     /// Removes a registered tracker from this client.
     #[inline]
-    pub fn send_unregister_tracker(&mut self, socket: SocketAddr) -> Result<(), SendError> {
+    pub fn unregister_tracker(&mut self, socket: SocketAddr) -> Result<(), SendError> {
         self.send_message(ToNetMsg::UnregisterTracker(socket))
     }
 
@@ -119,11 +118,12 @@ impl NetHandle {
                         // this only happens when the receiving end has
                         // disconnected in which case data will never be
                         // received
+                        let val = se.0;
                         log::error!(
                             "Failed to send message `{:?}`: receiver has been disconnected",
-                            se.0
+                            val
                         );
-                        Err(SendError::Disconnected(se.0))
+                        Err(SendError::Disconnected(val))
                     }
                 }
             }
