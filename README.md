@@ -17,5 +17,5 @@ cargo run --bin client
 ## how to run a tracker
 
 ```sh
-cargo run --bin tracker -- ip port
+RUST_LOG=debug cargo run --bin tracker -- port
 ```

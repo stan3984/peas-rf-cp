@@ -38,21 +38,18 @@ fn main() {
     println!("{} should now stay there for {}s", test_id, dur.as_secs());
 
     // querying everything
-    let mut ls = api::LookupSession::new(&sock, tracker, test_id);
+    let ls = api::LookupSession::new(&sock, tracker, test_id);
 
-    loop {
-        let cur = ls.next();
+    for cur in ls {
         match cur {
             Err(NetworkError::Timeout) => {
                 println!("tracker not responding");
-                break;
             },
             Err(_) => {
                 println!("ööööh");
-                break;
+                return;
             },
-            Ok(None) => break,
-            Ok(Some(adr)) => {
+            Ok(adr) => {
                 println!("{} knows about {}", adr, test_id);
             }
         }

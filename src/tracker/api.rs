@@ -12,6 +12,7 @@ pub struct LookupSession<'a> {
     adr: SocketAddr,
     id: Id,
     last_lookup: u32,
+    empty: bool,
 }
 
 impl<'a> LookupSession<'a> {
@@ -22,27 +23,47 @@ impl<'a> LookupSession<'a> {
             adr: track,
             id: room,
             last_lookup: 0,
+            empty: false
         }
     }
 
-    /// behaves like an iterator, returns Ok(None) if the tracker doesn't have any more entries
+}
+
+impl<'a> Iterator for LookupSession<'a> {
+    type Item = Result<SocketAddr>;
+
+    /// returns Ok(adr) with the next address from the tracker
     /// Err(NetworkError::Timeout) if the tracker isn't responding
     /// Err(_) if a severe network error occured
-    pub fn next(&mut self) -> Result<Option<SocketAddr>> {
+    /// returns None if the last thing was an error or if there aren't any more
+    /// addresses from the tracker.
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.empty {
+            return None;
+        }
         let if_lookup = |r: &TrackResp| {r.is_lookup()};
 
         let q = TrackQuery::Lookup{id: self.id, last_lookup: self.last_lookup};
-        let resp = send_with_response(self.sock, &q, self.adr, 3, Duration::from_millis(500), if_lookup)?;
+        let resp = send_with_response(self.sock, &q, self.adr, 3, Duration::from_millis(500), if_lookup);
 
-        if let TrackResp::LookupAns{adr: recv_adr, lookup_id: recv_id} = resp {
-            if let Some(adr) = recv_adr {
-                self.last_lookup = recv_id;
-                return Ok(Some(adr));
+        match resp {
+            Err(e) => {
+                self.empty = true;
+                return Some(Err(e));
+            },
+            Ok(TrackResp::LookupAns{adr, lookup_id}) => {
+                if let Some(a) = adr {
+                    self.last_lookup = lookup_id;
+                    return Some(Ok(a));
+                }
+                self.empty = true;
+                return None;
+            },
+            Ok(_) => {
+                error!("major bug if this happened, something wrong with if_lookup?");
+                panic!("the type system shouldn't allow this");
             }
-        } else {
-            error!("if_lookup must be incorrect!!");
         }
-        Ok(None)
     }
 }
 
