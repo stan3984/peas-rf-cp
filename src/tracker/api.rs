@@ -60,8 +60,7 @@ impl<'a> Iterator for LookupSession<'a> {
                 return None;
             },
             Ok(_) => {
-                error!("major bug if this happened, something wrong with if_lookup?");
-                panic!("the type system shouldn't allow this");
+                unreachable!();
             }
         }
     }
