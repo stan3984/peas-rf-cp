@@ -1,30 +1,29 @@
-use std::{io::Result, option::Option, sync::{self, Once}, time::SystemTime};
-use simple_logging;
 
-pub use log::LevelFilter;
+use flexi_logger::Logger;
 
-static LOG_INIT_ONCE: Once = sync::ONCE_INIT;
-
-/// Initializes a logger with a specified level filter.
-///
-/// Returns `Some` if this initialization has not been performed before, and `None` otherwise.
-pub fn init(level: LevelFilter) -> Option<Result<()>> {
-    let mut status = None;
-    
-    LOG_INIT_ONCE.call_once(|| {
-        status = Some(init0(level));
-    });
-
-    status
+/// log ONLY to a file
+pub fn init_file() {
+    init_file_stderr_level(true);
 }
 
-fn init0(level: LevelFilter) -> Result<()> {
-    let suffix = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(dur) => dur.as_secs().to_string(),
-        Err(_) => String::from("unknown")
-    };
-
-    let filename = format!("peas-{}.log", suffix);
-    
-    simple_logging::log_to_file(filename, level)
+/// log ONLY to stderr
+pub fn init_stderr() {
+    init_file_stderr_level(false);
 }
+
+/// change the environment variable RUST_LOG to change the log level
+pub fn init_file_stderr_level(file_or_stderr: bool) {
+    Logger::with_env_or_str("info")
+        .o_log_to_file(file_or_stderr)
+        .format(flexi_logger::opt_format)
+        .start()
+        .unwrap_or_else(|e| panic!("Logger initialization failed with {}", e));
+}
+
+
+// /// wrapper around expect that also logs as error
+// pub fn log_expect<T, E>(res: Result<T, E>, msg: &str) -> T
+// where E: std::fmt::Debug,
+// {
+//     res.map_err(|_| {log::error!("{:?}", msg);}).expect(msg)
+// }

@@ -6,4 +6,20 @@ authors = []
 [dependencies]
 log = "^0.4"
 rand = "^0.6"
-simple-logging = "^2.0"
+flexi_logger = "0.10.1"
+serde = "^1.0"
+serde_derive = "^1.0"
+bincode = "^1.0"
+pnet = "^0.21"
+
+[lib]
+name = "peas_rf_cp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "client"
+path = "src/client_main.rs"
+
+[[bin]]
+name = "tracker"
+path = "src/tracker_main.rs"

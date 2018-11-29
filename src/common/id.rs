@@ -1,7 +1,8 @@
 use rand::RngCore;
+use std::fmt;
 
 /// 64-bit unsigned integer used a unique identifier.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash, Serialize, Deserialize)]
 pub struct Id(u64);
 
 impl Id {
@@ -38,4 +39,10 @@ impl Id {
         (self.0 ^ other.0).leading_zeros()
     }
 
+}
+
+impl fmt::Display for Id {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
