@@ -13,16 +13,18 @@ use std::time::{Duration,Instant};
 // }
 
 /// sends `msg` to `dst` and waits for a response with type `U`.
+/// only a response that fulfills `pred` is accepted
 /// attempts this `retries` times before returning NetworkError::Timeout
 pub fn send_with_response<T, U, F>(sock: &UdpSocket, msg: &T, dst: SocketAddr, retries: u32, total_time: Duration, pred: F) -> Result<U>
 where T: Serialize,
       U: DeserializeOwned,
       F: Fn(&U) -> bool
 {
+    let from_same = |sender, msg: &U| sender == dst && pred(msg);
     let mut tryy = 1;
     loop {
         send(sock, msg, &dst)?;
-        match recv_until_timeout_from(sock, total_time, dst, &pred) {
+        match recv_until_timeout(sock, total_time, from_same) {
             Ok((_, x)) => return Ok(x),
             Err(NetworkError::Timeout) => (),
             Err(ioerror) => return Err(ioerror),
@@ -70,7 +72,7 @@ where T: DeserializeOwned
             }
         })?;
     if read >= buf.len() {
-        warn!("received a message that was too big {} >= {}", read, buf.len());
+        warn!("received a message that was too big {} == {}", read, buf.len());
         return Err(NetworkError::NoMessage);
     }
 
@@ -101,22 +103,22 @@ where T: DeserializeOwned
 }
 
 /// runs `recv_once` over and over up to `timeout` seconds.
-/// only accepting packets from `filter` that can be deserialized to T
 /// changes settings on sock
 /// returns NetworkError::Timeout if `timeout` ran out (not exact!)
 /// only returns an Ok if `pred` returns true on the received message
-pub fn recv_until_timeout_from<T, F>(sock: &UdpSocket, timeout: Duration, filter: SocketAddr, pred: F) -> Result<(SocketAddr, T)>
+pub fn recv_until_timeout<T, F>(sock: &UdpSocket, timeout: Duration, pred: F) -> Result<(SocketAddr, T)>
 where T: DeserializeOwned,
-      F: Fn(&T) -> bool
+      F: Fn(SocketAddr,&T) -> bool
 {
     set_timeout(sock, timeout/10)?;
     let start = Instant::now();
     loop {
         match recv_once(sock) {
             Ok((sender, data)) => {
-                if sender == filter && pred(&data) {
+                if pred(sender,&data) {
                     return Ok((sender, data))
                 }
+                debug!("pred failed");
             },
             Err(NetworkError::NoMessage) | Err(NetworkError::Timeout) => (),
             ioerror => return ioerror,
