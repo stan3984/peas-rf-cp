@@ -35,11 +35,9 @@ where T: Serialize,
 }
 
 /// open a socket on any port for udp
-/// Tries on a couple of different ports before failing
 pub fn open_any() -> Result<UdpSocket> {
    let my_adr = super::find_internet_interface()?;
-   let cons = super::get_connection_candidates(my_adr, 5);
-   Ok(UdpSocket::bind(&cons[..])?)
+   Ok(UdpSocket::bind(super::from_ipv4(my_adr, 0))?)
 }
 
 /// this is basically a wrapper around UdpSocket::send_to that takes something that is

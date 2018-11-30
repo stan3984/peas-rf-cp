@@ -67,13 +67,18 @@ pub fn find_internet_interface() -> Result<Ipv4Addr> {
     Err(NetworkError::Other("couldn't find an available interface"))
 }
 
-/// returns `num` connection candidates, consisting of `adr` and a random port.
-pub fn get_connection_candidates(adr: Ipv4Addr, num: i32) -> Vec<SocketAddr> {
-    let mut rng = rand::thread_rng();
-    let mut res = Vec::new();
+// /// returns `num` connection candidates, consisting of `adr` and a random port.
+// pub fn get_connection_candidates(adr: Ipv4Addr, num: i32) -> Vec<SocketAddr> {
+//     let mut rng = rand::thread_rng();
+//     let mut res = Vec::new();
 
-    for _ in 1..num {
-        res.push(SocketAddr::new(IpAddr::from(adr), rng.gen_range(1024, u16::max_value())));
-    }
-    res
+//     for _ in 1..num {
+//         res.push(SocketAddr::new(IpAddr::from(adr), rng.gen_range(1024, u16::max_value())));
+//     }
+//     res
+// }
+
+/// creates a SocketAddr from an ipv4 address and port
+pub fn from_ipv4(adr: Ipv4Addr, port: u16) -> SocketAddr {
+    SocketAddr::new(IpAddr::from(adr), port)
 }
