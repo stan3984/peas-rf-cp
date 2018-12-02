@@ -7,10 +7,87 @@ use bincode::{serialize,deserialize};
 use std::io;
 use super::*;
 use std::time::{Duration,Instant};
+use std::collections::BinaryHeap;
 
-// pub fn send_with_responses(sock: &UdpSocket, msgs: &HashMap<SocketAddr, &[u8]>, retries: u32) -> HashMap<SocketAddr, Vec<u8>> {
-//    HashMap::new()
-// }
+/// thing that `send_with_responses` uses to store timeouts
+/// for each connection. Sorts by the Instant in reverse order
+struct ResponseTime(Instant, u32, SocketAddr);
+
+impl std::cmp::PartialEq for ResponseTime {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for ResponseTime {}
+
+impl std::cmp::PartialOrd for ResponseTime {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::Ord for ResponseTime {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        other.0.cmp(&self.0)
+    }
+}
+
+/// using sock, sends all messages from `msgs` to their destinations. `msgs` maps the destination to the message to send.
+/// each destination gets `retries` amount of retries before that giving up on that destination (it will actually add it anyway if it arrives afterwards)
+/// each of the destinations retries gets `timeout` amount of time before trying again
+/// `pred` is run on a received message from an expected destination. The message
+/// is considered trash/pretends that it never arrived if `pred` returns false.
+/// The return value is Ok(hashmap) mapping destination addresses to their respective received message. An missing entry from the hashmap means that connection timed out.
+pub fn send_with_responses<S, D, F>(sock: &UdpSocket, msgs: &HashMap<SocketAddr, &S>, retries: u32, timeout: Duration, pred: F) -> Result<HashMap<SocketAddr, D>>
+where S: Serialize,
+      D: DeserializeOwned,
+      F: Fn(SocketAddr,&D) -> bool
+{
+    if msgs.is_empty() {
+        panic!("msgs in send_with_responses is empty");
+    }
+    set_timeout(sock, timeout/10)?;
+    let mut res = HashMap::new();
+    let mut pending = BinaryHeap::new();
+    for (adr, m) in msgs.iter() {
+        pending.push(ResponseTime(Instant::now(), 1, *adr));
+        send(&sock, m, adr)?;
+    }
+
+    'outer:
+    loop {
+        loop {
+            if pending.is_empty() {
+                break 'outer;
+            }
+            if res.contains_key(&pending.peek().unwrap().2) {
+                pending.pop();
+            } else if Instant::now().duration_since(pending.peek().unwrap().0) >= timeout {
+                let mut oldest = pending.pop().unwrap();
+                if oldest.1 < retries {
+                    oldest.0 = Instant::now();
+                    oldest.1 += 1;
+                    send(&sock, &msgs.get(&oldest.2), oldest.2)?;
+                    pending.push(oldest);
+                }
+            } else {
+                break;
+            }
+        }
+        match recv_once(sock) {
+            Ok((sender, data)) => {
+                if msgs.contains_key(&sender) && !res.contains_key(&sender) && pred(sender, &data) {
+                    res.insert(sender, data);
+                }
+                debug!("pred failed");
+            },
+            Err(NetworkError::NoMessage) | Err(NetworkError::Timeout) => (),
+            Err(ioerror) => return Err(ioerror),
+        }
+    }
+    Ok(res)
+}
 
 /// sends `msg` to `dst` and waits for a response with type `U`.
 /// only a response that fulfills `pred` is accepted
