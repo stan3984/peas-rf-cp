@@ -7,31 +7,7 @@ use bincode::{serialize,deserialize};
 use std::io;
 use super::*;
 use std::time::{Duration,Instant};
-use std::collections::BinaryHeap;
-
-/// thing that `send_with_responses` uses to store timeouts
-/// for each connection. Sorts by the Instant in reverse order
-struct ResponseTime(Instant, u32, SocketAddr);
-
-impl std::cmp::PartialEq for ResponseTime {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl Eq for ResponseTime {}
-
-impl std::cmp::PartialOrd for ResponseTime {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl std::cmp::Ord for ResponseTime {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        other.0.cmp(&self.0)
-    }
-}
+use std::collections::VecDeque;
 
 /// using sock, sends all messages from `msgs` to their destinations. `msgs` maps the destination to the message to send.
 /// each destination gets `retries` amount of retries before that giving up on that destination (it will actually add it anyway if it arrives afterwards)
@@ -44,14 +20,12 @@ where S: Serialize,
       D: DeserializeOwned,
       F: Fn(SocketAddr,&D) -> bool
 {
-    if msgs.is_empty() {
-        panic!("msgs in send_with_responses is empty");
-    }
+    assert!(!msgs.is_empty(), "msgs in send_with_responses is empty");
     set_timeout(sock, timeout/10)?;
     let mut res = HashMap::new();
-    let mut pending = BinaryHeap::new();
+    let mut pending = VecDeque::new();
     for (adr, m) in msgs.iter() {
-        pending.push(ResponseTime(Instant::now(), 1, *adr));
+        pending.push_back((Instant::now(), 1, *adr));
         send(&sock, m, adr)?;
     }
 
@@ -61,15 +35,15 @@ where S: Serialize,
             if pending.is_empty() {
                 break 'outer;
             }
-            if res.contains_key(&pending.peek().unwrap().2) {
-                pending.pop();
-            } else if Instant::now().duration_since(pending.peek().unwrap().0) >= timeout {
-                let mut oldest = pending.pop().unwrap();
+            if res.contains_key(&pending.front().unwrap().2) {
+                pending.pop_front();
+            } else if Instant::now().duration_since(pending.front().unwrap().0) >= timeout {
+                let mut oldest = pending.pop_front().unwrap();
                 if oldest.1 < retries {
                     oldest.0 = Instant::now();
                     oldest.1 += 1;
                     send(&sock, &msgs.get(&oldest.2), oldest.2)?;
-                    pending.push(oldest);
+                    pending.push_back(oldest);
                 }
             } else {
                 break;
