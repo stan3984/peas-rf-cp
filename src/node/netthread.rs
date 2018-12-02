@@ -19,12 +19,14 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
 
     let track_sock = udp::open_any().unwrap();
     let kadem_sock = udp::open_any().unwrap();
-    let mut ktab = ktable::Ktable::new(3);
     let my_id = Id::new_random();
+    let mut ktab = ktable::Ktable::new(3, my_id);
+    info!("my id is {}", my_id);
 
     let boot_node = kademlia::find_bootstrapper(&track_sock, room_id, &trackers).unwrap();
     if let Some((adr, id)) = boot_node {
         info!("found {:?} to bootstrap to", adr);
+        // TODO: köra i egen tråd?
         // add adr and id to ktable and run lookup on my_id
     } else {
         info!("you are the first one to connect to this room");

@@ -23,6 +23,12 @@ impl Entry {
 
 }
 
+impl Entry {
+    pub fn new(sock: SocketAddr, id: Id) -> Self {
+        unimplemented!()
+    }
+}
+
 impl Ktable {
     pub fn new(k: u32, me: Id) -> Self {
         // use Id length ??
