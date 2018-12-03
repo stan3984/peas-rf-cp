@@ -1,6 +1,7 @@
 use std::mem;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
 use super::*;
 use network::udp;
@@ -18,9 +19,8 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
 ) {
 
     let track_sock = udp::open_any().unwrap();
-    let kadem_sock = udp::open_any().unwrap();
     let my_id = Id::new_random();
-    let mut ktab = ktable::Ktable::new(3, my_id);
+    let ktab = kademlia::create_ktable(my_id);
     info!("my id is {}", my_id);
 
     let boot_node = kademlia::find_bootstrapper(&track_sock, room_id, &trackers).unwrap();

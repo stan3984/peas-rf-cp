@@ -5,7 +5,14 @@ use ::network::udp;
 use tracker::api;
 use ::common::id::Id;
 use std::time::Duration;
-use ::node::ktable::Ktable;
+use ::node::ktable::{Entry,Ktable};
+use std::sync::{Arc,Mutex};
+use std::thread::{self, JoinHandle};
+use std::collections::HashMap;
+use std::collections::HashSet;
+
+const LOOKUP_SIZE: usize = 5;
+const K: usize = 3;
 
 #[derive(Serialize, Deserialize, Debug)]
 enum KadMsg {
@@ -13,6 +20,10 @@ enum KadMsg {
     Ping,
     /// answer to `Ping`
     Pong(Id),
+    /// requests id to be looked up
+    Lookup(Id),
+    /// answer to lookup
+    Answer(Vec<Entry>),
 }
 
 impl KadMsg {
@@ -21,6 +32,114 @@ impl KadMsg {
             return true;
         }
         return false;
+    }
+    pub fn is_answer(&self) -> bool {
+        if let KadMsg::Answer(_) = self {
+            return true;
+        }
+        return false;
+    }
+}
+
+/// creates a ktable in a mutex for cross thread use
+pub fn create_ktable(my_id: Id) -> Arc<Mutex<Ktable>> {
+    Arc::new(Mutex::new(Ktable::new(K as u32, my_id)))
+}
+
+pub fn id_lookup(sock: UdpSocket, id: Id, ktable: Arc<Mutex<Ktable>>) -> JoinHandle<Vec<Entry>> {
+    // TODO: clear socket or remove all old packages?
+    thread::spawn(move || {
+        let mut visited: HashSet<SocketAddr> = HashSet::new();
+        let mut best: Vec<Entry> = Vec::with_capacity(K);
+        let msg = KadMsg::Lookup(id);
+        let mut destinations = HashMap::new();
+
+        let initial = ktable.lock().unwrap().closest_to(10, id);
+        for ent in initial.into_iter() {
+            destinations.insert(ent, &msg);
+        }
+
+        loop {
+            // ask all destinations
+            let responses = udp::send_with_responses(
+                &sock,
+                &destinations.iter().map(|(k,v)| (k.get_addr(), v)).collect(),
+                3,
+                Duration::from_millis(500),
+                |_, m: &KadMsg| m.is_answer()
+            ).expect("io error in id_lookup");
+
+            // process all responses
+            for (sender, resp) in responses.iter() {
+                visited.insert(*sender);
+                if let KadMsg::Answer(ans) = resp {
+                    let mut ktab = ktable.lock().unwrap();
+                    for a in ans {
+                        ktab.offer(*a);
+                        insert_into_best(&mut best, *a, id);
+                    }
+                } else {
+                    unreachable!();
+                }
+            }
+
+            // remove dead connections from ktable
+            {
+                let mut ktab = ktable.lock().unwrap();
+                for before in destinations.keys() {
+                    if ! responses.contains_key(&before.get_addr()) {
+                        ktab.delete(*before);
+                    }
+                }
+            }
+
+            if has_looked_at_all(&visited, &best) {
+                break;
+            } else {
+                // if 10 gå tillbaka till början igen
+                destinations.clear();
+                for b in best.iter() {
+                    if ! visited.contains(&b.get_addr()) {
+                        destinations.insert(*b, &msg);
+                    }
+                }
+            }
+        }
+        return best;
+    })
+}
+
+/// is every entry in `best` inside `visited`?
+fn has_looked_at_all(visited: &HashSet<SocketAddr>, best: &Vec<Entry>) -> bool {
+    for x in best.iter() {
+        if ! visited.contains(&x.get_addr()) {
+            return false;
+        }
+    }
+    true
+}
+
+/// inserts `ele` into `best` if `ele` is closer to `id` than any other
+/// entry in `best`. `ele` replaces another entry in `best` if `best`
+/// is full.
+fn insert_into_best(best: &mut Vec<Entry>, ele: Entry, id: Id) {
+    assert!(best.capacity() > 0, "best vec size 0");
+    if best.len() < best.capacity() {
+        best.push(ele);
+    } else {
+        let mut worst = 0;
+        let mut worst_dist = id.distance(&best[worst].get_id());
+        for i in 1..best.len() {
+            let temp = id.distance(&best[i].get_id());
+            if temp > worst_dist {
+                worst_dist = temp;
+                worst = i;
+            }
+        }
+
+        if ele.get_id().distance(&id) < worst_dist {
+            best[worst] = ele;
+        }
     }
 }
 
