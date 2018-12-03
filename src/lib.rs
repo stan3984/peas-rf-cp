@@ -6,6 +6,7 @@ extern crate log;
 extern crate rand;
 extern crate flexi_logger;
 extern crate pancurses;
+extern crate cursive;
 
 #[macro_use]
 extern crate serde_derive;

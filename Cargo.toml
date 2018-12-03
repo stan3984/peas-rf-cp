@@ -13,6 +13,7 @@ bincode = "^1.0"
 pnet = "^0.21"
 ncurses = "5.97.0"
 pancurses = "0.16.0"
+cursive = "0.9"
 
 [lib]
 name = "peas_rf_cp"

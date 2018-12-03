@@ -8,7 +8,8 @@ use std::env;
 use std::net::ToSocketAddrs;
 use peas_rf_cp::common::id::Id;
 use peas_rf_cp::ui::ui_main;
+use peas_rf_cp::ui::cursive_test;
 
 fn main() {
-    ui_main();
+    cursive_test();
 }
