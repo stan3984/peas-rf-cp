@@ -2,7 +2,7 @@
 use std::net::SocketAddr;
 use common::id::Id;
 
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 // TODO: implement getters
 // TODO: implement new and stuff
 pub struct Entry {
@@ -26,6 +26,12 @@ impl Entry {
 impl Entry {
     pub fn new(sock: SocketAddr, id: Id) -> Self {
         unimplemented!()
+    }
+    pub fn get_id(&self) -> Id {
+        self.id
+    }
+    pub fn get_addr(&self) -> SocketAddr {
+        self.sock
     }
 }
 
