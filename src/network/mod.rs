@@ -6,6 +6,7 @@ use std::io::{self, Read};
 
 pub mod udp;
 
+const MAX_UDP: usize = 512;
 pub type Result<T> = std::result::Result<T, NetworkError>;
 
 /// random network error

@@ -3,7 +3,7 @@ use std::net::{SocketAddr,UdpSocket,ToSocketAddrs};
 use std::collections::HashMap;
 use serde::ser::Serialize;
 use serde::de::DeserializeOwned;
-use bincode::{serialize,deserialize};
+use bincode::{serialize,deserialize,serialized_size};
 use std::io;
 use super::*;
 use std::time::{Duration,Instant};
@@ -93,13 +93,27 @@ pub fn open_any() -> Result<UdpSocket> {
    Ok(UdpSocket::bind(super::from_ipv4(my_adr, 0))?)
 }
 
+/// can the message be transmitted in one packet?
+/// ( ͡° ͜ʖ ͡°)
+pub fn will_fit<T>(msg: &T) -> bool
+where T: Serialize
+{
+    serialized_size(msg).map(|s| s <= MAX_UDP as u64).unwrap_or(false)
+}
+
 /// this is basically a wrapper around UdpSocket::send_to that takes something that is
 /// serializable instead of a slice of bytes.
+/// If msg becomes too large, then an NetworkError::NoMessage is returned
 pub fn send<T, A>(sock: &UdpSocket, msg: &T, to: A) -> Result<usize>
 where T: Serialize,
       A: ToSocketAddrs
 {
-    Ok(sock.send_to(serialize(msg).expect("could not serialize msg").as_slice(), to)?)
+    let seri = serialize(msg).expect("could not serialize msg");
+    if seri.len() > MAX_UDP {
+        error!("message to large! {} bytes is larger than {}", seri.len(), MAX_UDP);
+        return Err(NetworkError::NoMessage);
+    }
+    Ok(sock.send_to(seri.as_slice(), to)?)
 }
 
 /// tries to read ONE packet from the socket
@@ -111,7 +125,7 @@ where T: Serialize,
 pub fn recv_once<T>(sock: &UdpSocket) -> Result<(SocketAddr, T)>
 where T: DeserializeOwned
 {
-    let mut buf = [0; 512];
+    let mut buf = [0; MAX_UDP];
     let (read, sender) = sock.recv_from(&mut buf)
         .map_err(|e| {
             if let io::ErrorKind::WouldBlock = e.kind() {
