@@ -1,59 +1,83 @@
+extern crate clap;
+extern crate log;
 
 extern crate peas_rf_cp;
 
+use log::LevelFilter;
+
+use clap::{App, Arg, ArgMatches};
+
 use peas_rf_cp::common::logger;
-use peas_rf_cp::tracker::api;
-use peas_rf_cp::network::{self,NetworkError};
-use std::env;
-use std::net::ToSocketAddrs;
-use peas_rf_cp::common::id::Id;
+
+const ARG_USERNAME: &'static str = "username";
+const ARG_LOG_LEVEL: &'static str = "log-level";
+const ARG_LOG_STDERR: &'static str = "log-stderr";
+const ARG_NEW_ROOM: &'static str = "new-room";
+const ARG_JOIN_ROOM: &'static str = "join-room";
+const ARG_TRACKER: &'static str = "tracker";
 
 fn main() {
-    logger::init_file();
-    // log::info!("Hello, world!");
+    let matches = get_arguments();
 
-    // uppdatera oss själva för att sedan lista alla som tracker vet om
+    setup_logging(&matches);
+}
 
-    let args: Vec<_> = env::args().collect();
-    let sock = network::udp::open_any().unwrap();
-    let tracker = args[1].to_socket_addrs().unwrap().next().unwrap();
-
-    println!("tracker: {:?}", tracker);
-    println!("me: {:?}", sock.local_addr().unwrap());
-
-    // update test_id on tracker
-    let test_id = Id::from_u64(12);
-    println!("updating {}", test_id);
-    let dur = match api::update(&sock, test_id, sock.local_addr().unwrap(), tracker) {
-        Err(NetworkError::Timeout) => {
-            println!("tracker not responding :(");
-            std::process::exit(1);
-        },
-        Err(_) => {
-            println!("shshzhshshszzhzzsh");
-            std::process::exit(1);
-        },
-        Ok(ok) => ok,
+fn setup_logging<'a>(matches: &ArgMatches<'a>) {
+    let level = match matches.value_of(ARG_LOG_LEVEL) {
+        Some("trace") => LevelFilter::Trace,
+        Some("debug") => LevelFilter::Debug,
+        Some("info") => LevelFilter::Info,
+        Some("warn") => LevelFilter::Warn,
+        Some("error") => LevelFilter::Error,
+        _ => unreachable!(),
     };
-    println!("{} should now stay there for {}s", test_id, dur.as_secs());
 
-    // querying everything
-    let ls = api::LookupSession::new(&sock, tracker, test_id);
+    logger::initialize_logger(level, true);
+}
 
-    for cur in ls {
-        match cur {
-            Err(NetworkError::Timeout) => {
-                println!("tracker not responding");
-            },
-            Err(_) => {
-                println!("ööööh");
-                return;
-            },
-            Ok(adr) => {
-                println!("{} knows about {}", adr, test_id);
-            }
-        }
-    }
+fn get_arguments<'a>() -> ArgMatches<'a> {
+    let a = App::new("peas-rf-cp")
+        .version("0.0.0-alpha")
+        .arg(
+            Arg::with_name(ARG_USERNAME)
+                .long("username")
+                .short("u")
+                .help("Username to display")
+                .conflicts_with_all(&["new-room"])
+                .takes_value(true)
+                .requires_all(&[ARG_JOIN_ROOM]),
+        ).arg(
+            Arg::with_name(ARG_LOG_LEVEL)
+                .long("log")
+                .help("Logging level")
+                .possible_values(&["trace", "debug", "info", "warn", "error"])
+                .default_value("info"),
+        ).arg(
+            Arg::with_name(ARG_LOG_STDERR)
+                .long("log-stderr")
+                .help("Set logging output to standard error (default is logging to file)"),
+        ).arg(
+            Arg::with_name(ARG_NEW_ROOM)
+                .long("new-room")
+                .help("Creates a new room file and exits")
+                .takes_value(true)
+                .conflicts_with_all(&[ARG_USERNAME, ARG_JOIN_ROOM]),
+        ).arg(
+            Arg::with_name(ARG_JOIN_ROOM)
+                .long("join")
+                .short("j")
+                .help("Specifies the room to join")
+                .takes_value(true)
+                .conflicts_with_all(&[ARG_NEW_ROOM])
+                .requires_all(&[ARG_USERNAME]),
+        ).arg(
+            Arg::with_name(ARG_TRACKER)
+                .long("tracker")
+                .short("t")
+                .help("Specifies the tracker to connect to")
+                .takes_value(true)
+                .requires_all(&[ARG_JOIN_ROOM]),
+        );
 
-    // log::debug!("Shutting down application...");
+    a.get_matches()
 }
