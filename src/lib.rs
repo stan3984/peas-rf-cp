@@ -5,6 +5,7 @@
 extern crate log;
 extern crate rand;
 extern crate flexi_logger;
+extern crate pancurses;
 
 #[macro_use]
 extern crate serde_derive;
@@ -16,4 +17,5 @@ extern crate pnet;
 pub mod common;
 pub mod tracker;
 pub mod network;
+pub mod ui;
 pub mod node;
