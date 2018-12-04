@@ -1,7 +1,10 @@
 
 use pancurses::*;
 use cursive::*;
-use cursive::theme::*;
+use cursive::align::VAlign::Bottom;
+use cursive::theme::PaletteColor::*;
+use cursive::theme::Color::*;
+use cursive::theme::BaseColor::*;
 use cursive::traits::*;
 use cursive::event::{Event, Key};
 use cursive::vec::Vec2;
@@ -26,6 +29,7 @@ pub fn cursive_test() {
         .child(BoxView::new(SizeConstraint::Full,
                             SizeConstraint::Full,
                             Panel::new(TextView::new("")
+                                .v_align(Bottom)
                                 .with_id("output"))))
         .child(BoxView::new(SizeConstraint::Full,
                             SizeConstraint::Fixed(5),
