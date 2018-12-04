@@ -13,9 +13,7 @@ use std::time::Duration;
 use cursive::view::*;
 use cursive::views::*;
 
-// This example will print a stream of logs generated from a separate thread.
-//
-// We will use a custom view using a channel to receive data asynchronously.
+
 
 
 pub fn cursive_test() {
@@ -43,7 +41,7 @@ pub fn cursive_test() {
     cursive.run();
 }
 
-pub fn cursive_test_old() {
+/*pub fn cursive_test_old() {
     // As usual, create the Cursive root
     let mut siv = Cursive::default();
 
@@ -135,3 +133,4 @@ impl View for BufferView {
         }
     }
 }
+*/
