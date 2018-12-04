@@ -7,9 +7,9 @@ use ::common::id::Id;
 use std::time::Duration;
 use ::node::ktable::{Entry,Ktable};
 use std::sync::{Arc,Mutex};
-use std::thread::{self, JoinHandle};
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::thread;
+use std::collections::{HashMap,HashSet};
+use std::sync::mpsc;
 
 const LOOKUP_SIZE: usize = 5;
 const K: usize = 3;
@@ -21,7 +21,8 @@ enum KadMsg {
     /// answer to `Ping`
     Pong(Id),
     /// requests id to be looked up
-    Lookup(Id),
+    /// Lookup(id_to_lookup, requester_entry)
+    Lookup(Id, Entry),
     /// answer to lookup
     Answer(Vec<Entry>),
 }
@@ -46,12 +47,15 @@ pub fn create_ktable(my_id: Id) -> Arc<Mutex<Ktable>> {
     Arc::new(Mutex::new(Ktable::new(K as u32, my_id)))
 }
 
-pub fn id_lookup(sock: UdpSocket, id: Id, ktable: Arc<Mutex<Ktable>>) -> JoinHandle<Vec<Entry>> {
+/// starts a lookup of `id` in a separate thread. `ktable` is continously updated with new nodes and removal of dead ones.
+/// returns the K nodes that are the closest to `id`
+pub fn id_lookup(sock: UdpSocket, id: Id, myself: Entry, ktable: Arc<Mutex<Ktable>>) -> mpsc::Receiver<Vec<Entry>> {
     // TODO: clear socket or remove all old packages?
+    let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         let mut visited: HashSet<SocketAddr> = HashSet::new();
         let mut best: Vec<Entry> = Vec::with_capacity(K);
-        let msg = KadMsg::Lookup(id);
+        let msg = KadMsg::Lookup(id, myself);
         let mut destinations = HashMap::new();
 
         let initial = ktable.lock().unwrap().closest_to(10, id);
@@ -105,8 +109,9 @@ pub fn id_lookup(sock: UdpSocket, id: Id, ktable: Arc<Mutex<Ktable>>) -> JoinHan
                 }
             }
         }
-        return best;
-    })
+        tx.send(best).expect("caller killed its receive end");
+    });
+    rx
 }
 
 /// is every entry in `best` inside `visited`?
@@ -145,6 +150,7 @@ fn insert_into_best(best: &mut Vec<Entry>, ele: Entry, id: Id) {
 
 /// queries all trackers and returns the first bootstrap node that is alive
 pub fn find_bootstrapper(sock: &UdpSocket, room_id: Id, trackers: &Vec<SocketAddr>) -> Result<Option<(SocketAddr, Id)>> {
+    let mut timedout = 0;
     'outer:
     for track in trackers.iter() {
         let sess = api::LookupSession::new(sock, *track, room_id);
@@ -155,12 +161,16 @@ pub fn find_bootstrapper(sock: &UdpSocket, room_id: Id, trackers: &Vec<SocketAdd
                         return Ok(Some((adr, id)));
                     }
                 },
-                Err(NetworkError::Timeout) => continue 'outer,
+                Err(NetworkError::Timeout) => {timedout += 1; continue 'outer},
                 Err(e) => return Err(e),
             }
         }
     }
-    Ok(None)
+    if timedout == trackers.len() {
+        Err(NetworkError::Timeout)
+    } else {
+        Ok(None)
+    }
 }
 
 /// simply checks whether `adr` is an alive kademlia node and returns its id
@@ -176,15 +186,31 @@ pub fn is_alive(sock: &UdpSocket, adr: SocketAddr) -> Result<Option<Id>> {
 
 /// handles one kademlia message
 /// times out after `timeout`
-pub fn handle_msg(sock: &UdpSocket, my_id: Id, timeout: Duration) -> Result<()> {
+pub fn handle_msg(sock: &UdpSocket, my_id: Id, timeout: Duration, ktable: Arc<Mutex<Ktable>>) -> Result<()> {
     match udp::recv_until_timeout(sock, timeout, |_,_| true) {
         Ok((sender, KadMsg::Ping)) => {
             debug!("{} pinged me!", sender);
             udp::send(sock, &KadMsg::Pong(my_id), sender)?;
             Ok(())
         },
+        Ok((sender, KadMsg::Lookup(id, requester_entry))) => {
+            // NOTE: sender is a temporary address
+            let closest;
+            {
+                let mut ktab = ktable.lock().unwrap();
+                closest = ktab.closest_to(K as u32, id);
+                ktab.offer(requester_entry);
+            }
+            let clos_len = closest.len();
+            udp::send(sock, &KadMsg::Answer(closest), sender)?;
+            debug!("{} wanted to lookup {}, i answered with {}/{} nodes", sender, id, clos_len, K);
+            Ok(())
+        },
         Err(NetworkError::Timeout) => return Ok(()),
         Err(e) => return Err(e),
-        _ => Ok(()),
+        _ => {
+            warn!("received a KadMsg that i shouldn't have gotten");
+            Ok(())
+        },
     }
 }
