@@ -8,6 +8,7 @@ use log::LevelFilter;
 use clap::{App, Arg, ArgMatches};
 
 use peas_rf_cp::common::logger;
+use peas_rf_cp::common::id::Id;
 
 const ARG_USERNAME: &'static str = "username";
 const ARG_LOG_LEVEL: &'static str = "log-level";
@@ -20,19 +21,24 @@ fn main() {
     let matches = get_arguments();
 
     setup_logging(&matches);
+
+    log::info!("Shutting down");
 }
 
 fn setup_logging<'a>(matches: &ArgMatches<'a>) {
     let level = match matches.value_of(ARG_LOG_LEVEL) {
+        Some("all") => LevelFilter::max(),
         Some("trace") => LevelFilter::Trace,
         Some("debug") => LevelFilter::Debug,
         Some("info") => LevelFilter::Info,
         Some("warn") => LevelFilter::Warn,
         Some("error") => LevelFilter::Error,
+        Some("off") => LevelFilter::Off,
         _ => unreachable!(),
     };
 
-    logger::initialize_logger(level, true);
+    let to_file = !matches.is_present(ARG_LOG_STDERR);
+    logger::initialize_logger(level, to_file);
 }
 
 fn get_arguments<'a>() -> ArgMatches<'a> {
@@ -50,12 +56,12 @@ fn get_arguments<'a>() -> ArgMatches<'a> {
             Arg::with_name(ARG_LOG_LEVEL)
                 .long("log")
                 .help("Logging level")
-                .possible_values(&["trace", "debug", "info", "warn", "error"])
-                .default_value("info"),
+                .possible_values(&["all", "trace", "debug", "info", "warn", "error", "off"])
+                .default_value("off"),
         ).arg(
             Arg::with_name(ARG_LOG_STDERR)
                 .long("log-stderr")
-                .help("Set logging output to standard error (default is logging to file)"),
+                .help("Directs logging output to standard error (default is logging to file)"),
         ).arg(
             Arg::with_name(ARG_NEW_ROOM)
                 .long("new-room")
