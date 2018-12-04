@@ -1,14 +1,19 @@
+extern crate bincode;
+
 extern crate clap;
-extern crate log;
-
-extern crate peas_rf_cp;
-
-use log::LevelFilter;
-
 use clap::{App, Arg, ArgMatches};
 
-use peas_rf_cp::common::logger;
+extern crate log;
+use log::LevelFilter;
+
+extern crate peas_rf_cp;
 use peas_rf_cp::common::id::Id;
+use peas_rf_cp::common::logger;
+
+use std::fs::File;
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::path::Path;
+use std::mem;
 
 const ARG_USERNAME: &'static str = "username";
 const ARG_LOG_LEVEL: &'static str = "log-level";
@@ -21,6 +26,15 @@ fn main() {
     let matches = get_arguments();
 
     setup_logging(&matches);
+
+    if matches.is_present(ARG_NEW_ROOM) {
+        match create_room(&matches) {
+            Ok(_) => {}
+            Err(x) => log::error!("Failed to create room ({})", x),
+        }
+    } else if matches.is_present(ARG_JOIN_ROOM) {
+        parse_room(&matches);
+    }
 
     log::info!("Shutting down");
 }
@@ -39,6 +53,66 @@ fn setup_logging<'a>(matches: &ArgMatches<'a>) {
 
     let to_file = !matches.is_present(ARG_LOG_STDERR);
     logger::initialize_logger(level, to_file);
+}
+
+fn create_room<'a>(matches: &ArgMatches<'a>) -> io::Result<()> {
+    let new_room = matches.value_of(ARG_NEW_ROOM);
+    assert!(new_room.is_some());
+
+    let room_name = new_room.unwrap();
+    assert!(room_name.len() > 0);
+
+    log::trace!(
+        "Attempting to create room file for new room `{}`",
+        room_name
+    );
+
+    let room_id = Id::new_random();
+
+    let file_name = format!("{}.peas-room", room_name);
+
+    let mut file = File::create(&file_name)?;
+    file.write(&bincode::serialize(&room_id).unwrap()[..]);
+    // file.write(&bincode::serialize(&room_name).unwrap()[..]);
+
+    log::trace!("Successfully created room file `{}`", file_name);
+
+    Ok(())
+}
+
+fn parse_room<'a>(matches: &ArgMatches<'a>) -> io::Result<Id> {
+    let join_room = matches.value_of(ARG_JOIN_ROOM);
+    assert!(join_room.is_some());
+
+    let room_file = join_room.unwrap();
+
+    log::debug!("Reading from file `{}`", room_file);
+
+    let mut file = File::open(room_file)?;
+    file.seek(SeekFrom::Start(0));
+
+    let id = {
+        // note: this code can be simplified but is kept this way in
+        // case we want to write/read more data than just the id
+
+        let mut buffer = vec![0; mem::size_of::<Id>()];
+
+        let room_id = {
+            file.read(&mut buffer)?;
+            bincode::deserialize::<Id>(&buffer).unwrap()
+        };
+
+        // let room_name = {
+        //     buffer.clear();
+        //     file.read_to_end(&mut buffer);
+        //     bincode::deserialize::<String>(&buffer).unwrap()
+        // };
+
+        log::debug!("Parsed room with id `{}`", room_id);
+        room_id
+    };
+
+    Ok(id)
 }
 
 fn get_arguments<'a>() -> ArgMatches<'a> {
