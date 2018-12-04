@@ -35,6 +35,7 @@ impl NetHandle {
 
         let netusername = user_name.clone();
         let jhandle = thread::spawn(move || {
+            netthread::run(chan_in_recv, chan_out_send, with_output, user_id, netusername, room_id, trackers);
         });
 
         NetHandle {
