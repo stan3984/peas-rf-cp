@@ -1,49 +1,49 @@
 
 use pancurses::*;
 use cursive::*;
+use cursive::theme::*;
 use cursive::traits::*;
 use cursive::event::{Event, Key};
 use cursive::vec::Vec2;
-use cursive::views::{Dialog, EditView, OnEventView, TextArea};
 use cursive::{Cursive, Printer};
 use std::collections::VecDeque;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
-
-
-
-
-pub fn ui_main() {
-    let window = initscr();
-
-    window.keypad(true); // Set keypad mode
-    mousemask(ALL_MOUSE_EVENTS, std::ptr::null_mut()); // Listen to all mouse events
-
-    window.printw("Welcome to peas-rf-cp, a distributed chat program made in Rust!\n\nRun peas --create newroom to create a new chat room.\nRun peas --join [ip:port] to join a already existing room.\n\nPress 'q' to quit.");
-    window.refresh();
-
-    loop {
-        match window.getch() {
-            Some(Input::KeyMouse) => {
-                if let Ok(mouse_event) = getmouse() {
-                    window.mvprintw(5, 0,
-                                    &format!("Mouse at {},{}", mouse_event.x, mouse_event.y),
-                    );
-                };
-            }
-            Some(Input::Character(x)) if x == 'q' => break,
-            _ => (),
-        }
-    }
-    endwin();
-}
+use cursive::view::*;
+use cursive::views::*;
 
 // This example will print a stream of logs generated from a separate thread.
 //
 // We will use a custom view using a channel to receive data asynchronously.
 
+
 pub fn cursive_test() {
+
+    let mut cursive = Cursive::ncurses();
+
+    // Create a view tree with a TextArea for input, and a
+    // TextView for output.
+    cursive.add_layer(LinearLayout::vertical()
+        .child(BoxView::new(SizeConstraint::Full,
+                            SizeConstraint::Full,
+                            Panel::new(TextView::new("")
+                                .with_id("output"))))
+        .child(BoxView::new(SizeConstraint::Full,
+                            SizeConstraint::Fixed(5),
+                            Panel::new(OnEventView::new(TextArea::new()
+                                                     .content("")
+                                                     .with_id("input"))
+                                          .on_pre_event(Key::Enter, |c| {
+                                              let mut input = c.find_id::<TextArea>("input").unwrap();
+                                              let mut output = c.find_id::<TextView>("output").unwrap();
+                                              output.set_content(input.get_content());
+                                              input.set_content("");
+                                          })))));
+    cursive.run();
+}
+
+pub fn cursive_test_old() {
     // As usual, create the Cursive root
     let mut siv = Cursive::default();
 
