@@ -1,5 +1,5 @@
 use std::mem;
-use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{Receiver, TryRecvError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, Duration};
 
@@ -44,6 +44,7 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
         first_lookup = false;
     }
 
+    'main:
     loop {
         // check if we need to update ourself in the tracker
         // TODO: we are only assuming we have one tracker
@@ -56,11 +57,12 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
             {
                 Ok(ttl) => {
                     debug!("we are updated for {} seconds", ttl.as_secs());
-                    tracker_timer = Timer::new(ttl);
+                    tracker_timer.reset_with(ttl);
                 },
                 Err(NetworkError::Timeout) => {
-                    warn!("tracker on update is not responding");
-                    tracker_timer.disable();
+                    let again = 10;
+                    warn!("tracker on update is not responding, trying again in {}s", again);
+                    tracker_timer.reset_with(Duration::from_secs(again));
                 },
                 Err(e) => {
                     error!("tracker update severe error {:?}", e);
@@ -98,9 +100,24 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
         }
 
         //handle one tcp? or maybe in own thread?
-        //read from chan_in
-        // chan_in.try_recv();
+
+        //check if someone wants to say something
+        // TODO: loop this to read more stuff?
+        match chan_in.try_recv() {
+            Ok(ToNetMsg::Terminate) => {
+                info!("netthread is terminating as per request...");
+                break 'main;
+            }
+            Ok(ToNetMsg::NewMsg(msg)) => (), //// TODO: send to all others
+            Err(TryRecvError::Empty) => (),
+            Err(TryRecvError::Disconnected) => {
+                warn!("I don't have a master any more :(, I will commit suicide");
+                break 'main;
+            }
+        }
         // chan_out.send(FromNetMsg::NewMsg(Message::new("hej".to_string(), Id::from_u64(2), "kalle".to_string(), false))).unwrap();
     }
+
+    // TODO: gracefully tell everyone else that i am quitting
 
 }

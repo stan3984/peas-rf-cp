@@ -8,7 +8,7 @@ pub struct Timer {
 }
 
 impl Timer {
-    /// a timer that will return true after a while
+    /// starts a timer that will return true after a while
     pub fn new(dur: Duration) -> Self {
         Timer {
             start: Instant::now(),
@@ -31,9 +31,15 @@ impl Timer {
     pub fn is_disabled(&self) -> bool {
         !self.enabled
     }
-    /// enables and restarts the timer
+    /// enables and restarts the timer with the same timeout
+    /// it had previously
     pub fn reset(&mut self) {
         self.enabled = true;
         self.start = Instant::now();
+    }
+    /// same as `reset` but also changes the timer period (correct word?)
+    pub fn reset_with(&mut self, dur: Duration) {
+        self.duration = dur;
+        self.reset();
     }
 }

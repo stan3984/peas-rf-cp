@@ -15,6 +15,7 @@ use std::collections::VecDeque;
 /// `pred` is run on a received message from an expected destination. The message
 /// is considered trash/pretends that it never arrived if `pred` returns false.
 /// The return value is Ok(hashmap) mapping destination addresses to their respective received message. An missing entry from the hashmap means that connection timed out.
+/// changes settings on sock
 pub fn send_with_responses<S, D, F>(sock: &UdpSocket, msgs: &HashMap<SocketAddr, &S>, retries: u32, timeout: Duration, pred: F) -> Result<HashMap<SocketAddr, D>>
 where S: Serialize,
       D: DeserializeOwned,
@@ -66,6 +67,7 @@ where S: Serialize,
 /// sends `msg` to `dst` and waits for a response with type `U`.
 /// only a response that fulfills `pred` is accepted
 /// attempts this `retries` times before returning NetworkError::Timeout
+/// changes settings on sock
 pub fn send_with_response<T, U, F>(sock: &UdpSocket, msg: &T, dst: SocketAddr, retries: u32, total_time: Duration, pred: F) -> Result<U>
 where T: Serialize,
       U: DeserializeOwned,
@@ -153,7 +155,7 @@ where T: DeserializeOwned
 }
 
 /// runs `recv_once` until it returns something successful
-/// sets sock to blocking
+/// changes settings on sock
 pub fn recv_until_msg<T>(sock: &UdpSocket) -> Result<(SocketAddr, T)>
 where T: DeserializeOwned
 {
