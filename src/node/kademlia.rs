@@ -149,6 +149,7 @@ fn insert_into_best(best: &mut Vec<Entry>, ele: Entry, id: Id) {
 }
 
 /// queries all trackers and returns the first bootstrap node that is alive
+/// returns Err(NetworkError::Timeout) if no tracker responded
 pub fn find_bootstrapper(sock: &UdpSocket, room_id: Id, trackers: &Vec<SocketAddr>) -> Result<Option<(SocketAddr, Id)>> {
     let mut timedout = 0;
     'outer:
@@ -161,7 +162,11 @@ pub fn find_bootstrapper(sock: &UdpSocket, room_id: Id, trackers: &Vec<SocketAdd
                         return Ok(Some((adr, id)));
                     }
                 },
-                Err(NetworkError::Timeout) => {timedout += 1; continue 'outer},
+                Err(NetworkError::Timeout) => {
+                    info!("tracker {} timed out", track);
+                    timedout += 1;
+                    continue 'outer;
+                },
                 Err(e) => return Err(e),
             }
         }

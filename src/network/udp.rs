@@ -10,7 +10,7 @@ use std::time::{Duration,Instant};
 use std::collections::VecDeque;
 
 /// using sock, sends all messages from `msgs` to their destinations. `msgs` maps the destination to the message to send.
-/// each destination gets `retries` amount of retries before that giving up on that destination (it will actually add it anyway if it arrives afterwards)
+/// each destination gets `retries` amount of retries before that giving up on that destination (it will actually add it anyway if it arrives late and we are still going)
 /// each of the destinations retries gets `timeout` amount of time before trying again
 /// `pred` is run on a received message from an expected destination. The message
 /// is considered trash/pretends that it never arrived if `pred` returns false.

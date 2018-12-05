@@ -1,19 +1,20 @@
 use std::mem;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
-use std::time::Duration;
 use std::sync::{Arc, Mutex};
+use std::time::{Instant, Duration};
 
 use super::*;
 use network::udp;
+use network::NetworkError;
 use common::id::Id;
+use tracker::api;
+use common::timer::Timer;
 
 const RECV_TIMEOUT: Duration = Duration::from_millis(50);
 
 pub fn run(chan_in: Receiver<ToNetMsg>,
            chan_out: Sender<FromNetMsg>,
            with_output: bool, // TODO: är antagligen bättre att ha chan_out som en option
-           user_id: Id,
-           user_name: String,
            room_id: Id,
            trackers: Vec<SocketAddr>
 ) {
@@ -22,13 +23,16 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
     let my_id = Id::new_random();
     let myself = ktable::Entry::new(kad_sock.local_addr().unwrap(), my_id);
     let ktab = kademlia::create_ktable(my_id);
-    info!("my id is {}", my_id);
+
+    info!("my id is {}, and my address is {}", my_id, kad_sock.local_addr().unwrap());
+
     let mut looking = None;
     let mut first_lookup = true;
 
-    // TODO: check if all trackers are dead
     let mut tracker_timer = Timer::from_millis(0);
     let mut lookup_timer = Timer::from_millis(1000*60);
+
+    // find a bootstrapper
     let boot_node = kademlia::find_bootstrapper(&kad_sock, room_id, &trackers).unwrap();
     if let Some((adr, id)) = boot_node {
         info!("found {:?} to bootstrap to", adr);
@@ -72,14 +76,17 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
         if looking.is_some() {
             if looking.as_mut().unwrap().try_recv().is_ok() {
                 looking = None;
+                debug!("a lookup finished");
             }
         }
 
         // lookup from bootstrapper is done
         if first_lookup && looking.is_none() {
             first_lookup = false;
+            debug!("the bootstrap lookup finished");
             // setup initial tcp
         }
+
         // run an id_lookup on a random id to update our and all others ktables
         if looking.is_none() && lookup_timer.expired(1.0) {
             debug!("a random id lookup started");
@@ -89,11 +96,11 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
                                                ktab.clone()));
             lookup_timer.reset();
         }
+
         //handle one tcp? or maybe in own thread?
         //read from chan_in
         // chan_in.try_recv();
-        chan_out.send(FromNetMsg::NewMsg(Message::new("hej".to_string(), Id::from_u64(2), "kalle".to_string(), false))).unwrap();
+        // chan_out.send(FromNetMsg::NewMsg(Message::new("hej".to_string(), Id::from_u64(2), "kalle".to_string(), false))).unwrap();
     }
 
 }
-

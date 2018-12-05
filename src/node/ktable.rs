@@ -41,6 +41,7 @@ impl Ktable {
         Ktable {table: vec![Vec::new(); 64], k: k, id: me}
     }
     pub fn offer(&mut self, offer: Entry) {
+        debug!("ktable got {:?} offered", offer);
         if offer.id == self.id{
             return;
         }
@@ -52,6 +53,7 @@ impl Ktable {
         }
     }
     pub fn offer_replace(&mut self, offer: Entry) {
+        debug!("ktable deleted {:?}", entry);
         if offer.id == self.id{
             return;
         }
