@@ -14,15 +14,16 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::mem;
 
-const ARG_USERNAME: &'static str = "username";
-const ARG_LOG_LEVEL: &'static str = "log-level";
-const ARG_LOG_STDERR: &'static str = "log-stderr";
-const ARG_NEW_ROOM: &'static str = "new-room";
-const ARG_JOIN_ROOM: &'static str = "join-room";
-const ARG_TRACKER: &'static str = "tracker";
+const ARG_USERNAME: &str = "username";
+const ARG_LOG_LEVEL: &str = "log-level";
+const ARG_LOG_STDERR: &str = "log-stderr";
+const ARG_NEW_ROOM: &str = "new-room";
+const ARG_JOIN_ROOM: &str = "join-room";
+const ARG_TRACKER: &str = "tracker";
 
 fn main() {
-    let matches = get_arguments();
+    let app = create_app();
+    let matches = app.get_matches();
 
     setup_logging(&matches);
 
@@ -49,8 +50,8 @@ fn setup_logging<'a>(matches: &ArgMatches<'a>) {
         Some("info") => LevelFilter::Info,
         Some("warn") => LevelFilter::Warn,
         Some("error") => LevelFilter::Error,
-        Some("off") => LevelFilter::Off,
-        _ => unreachable!(),
+        None => LevelFilter::Off,
+        Some(_) => unreachable!(),
     };
 
     let to_file = !matches.is_present(ARG_LOG_STDERR);
@@ -101,7 +102,7 @@ fn parse_room<'a>(matches: &ArgMatches<'a>) -> io::Result<Id> {
     Ok(id)
 }
 
-fn get_arguments<'a>() -> ArgMatches<'a> {
+fn create_app<'a, 'b>() -> App<'a, 'b> {
     let a = App::new("peas-rf-cp")
         .version("0.0.0-alpha")
         .arg(
@@ -116,12 +117,13 @@ fn get_arguments<'a>() -> ArgMatches<'a> {
             Arg::with_name(ARG_LOG_LEVEL)
                 .long("log")
                 .help("Logging level")
-                .possible_values(&["all", "trace", "debug", "info", "warn", "error", "off"])
-                .default_value("off"),
+                .takes_value(true)
+                .possible_values(&["all", "trace", "debug", "info", "warn", "error"]),
         ).arg(
             Arg::with_name(ARG_LOG_STDERR)
                 .long("log-stderr")
-                .help("Directs logging output to standard error (default is logging to file)"),
+                .help("Directs logging output to standard error (default is logging to file)")
+                .requires_all(&[ARG_LOG_LEVEL]),
         ).arg(
             Arg::with_name(ARG_NEW_ROOM)
                 .long("new-room")
@@ -145,5 +147,5 @@ fn get_arguments<'a>() -> ArgMatches<'a> {
                 .requires_all(&[ARG_JOIN_ROOM]),
         );
 
-    a.get_matches()
+    return a;
 }
