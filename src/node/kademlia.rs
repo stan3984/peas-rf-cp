@@ -73,14 +73,25 @@ pub fn id_lookup(sock: UdpSocket, id: Id, myself: Entry, ktable: Arc<Mutex<Ktabl
                 |_, m: &KadMsg| m.is_answer()
             ).expect("io error in id_lookup");
 
+            // say that we have visited all destinations
+            for d in destinations.keys() {
+                visited.insert(d.get_addr());
+            }
+
+            // TODO: gör best till en ktable
+            // 1) använd ktab som best
+            // 2) uppdatera båda i tandemn
+            // 3) spara ändringarna och applya dem i slutet till ktab
+
             // process all responses
-            for (sender, resp) in responses.iter() {
-                visited.insert(*sender);
+            for (_, resp) in responses.iter() {
                 if let KadMsg::Answer(ans) = resp {
                     let mut ktab = ktable.lock().unwrap();
                     for a in ans {
-                        ktab.offer(*a);
-                        insert_into_best(&mut best, *a, id);
+                        if ! visited.contains(&a.get_addr()) {
+                            ktab.offer(*a);
+                            insert_into_best(&mut best, *a, id);
+                        }
                     }
                 } else {
                     unreachable!();
@@ -127,8 +138,12 @@ fn has_looked_at_all(visited: &HashSet<SocketAddr>, best: &Vec<Entry>) -> bool {
 /// inserts `ele` into `best` if `ele` is closer to `id` than any other
 /// entry in `best`. `ele` replaces another entry in `best` if `best`
 /// is full.
+/// does nothing if `ele` already is in `best`
 fn insert_into_best(best: &mut Vec<Entry>, ele: Entry, id: Id) {
     assert!(best.capacity() > 0, "best vec size 0");
+    if best.contains(&ele) {
+        return;
+    }
     if best.len() < best.capacity() {
         best.push(ele);
     } else {

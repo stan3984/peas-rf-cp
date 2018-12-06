@@ -44,7 +44,6 @@ impl Ktable {
         }
     }
     pub fn offer_replace(&mut self, offer: Entry) {
-        debug!("ktable deleted {:?}", offer);
         if offer.id == self.id{
             return;
         }
@@ -57,6 +56,7 @@ impl Ktable {
         }
     }
     pub fn delete_id(&mut self, id: Id){
+        debug!("ktable deleted {:?}", id);
         if id == self.id{
             return;
         }
@@ -66,14 +66,14 @@ impl Ktable {
         }
     }
     pub fn delete_entry(&mut self, entry: Entry) {
+        debug!("ktable deleted {:?}", entry);
         if entry.id == self.id{
             return;
         }
         let (v1_index, v2_index, found) = self.index_from_id(entry.id);
         if found {
-            if entry == self.table[v1_index][v2_index]{
-                self.table[v1_index].remove(v2_index);
-            }
+            self.table[v1_index].remove(v2_index);
+            debug!("actually removed it");
         }
     }
     pub fn clear(&mut self) {
