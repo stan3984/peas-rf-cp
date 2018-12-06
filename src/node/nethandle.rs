@@ -46,11 +46,11 @@ impl NetHandle {
         }
     }
 
-    /// Extracts a `JoinHandle` to the underlying thread.
-    #[inline]
-    pub fn join_handle(&self) -> &JoinHandle<()> {
-        &self.join_handle
-    }
+    // /// Extracts a `JoinHandle` to the underlying thread.
+    // #[inline]
+    // pub fn join_handle(&self) -> &JoinHandle<()> {
+    //     &self.join_handle
+    // }
 
     // /// Closes and drops the input channel.
     // ///
