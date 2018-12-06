@@ -1,13 +1,12 @@
-
-use std::net::{SocketAddr,UdpSocket,ToSocketAddrs};
-use std::collections::HashMap;
-use serde::ser::Serialize;
-use serde::de::DeserializeOwned;
-use bincode::{serialize,deserialize,serialized_size};
-use std::io;
 use super::*;
-use std::time::{Duration,Instant};
+use bincode::{deserialize, serialize, serialized_size};
+use serde::de::DeserializeOwned;
+use serde::ser::Serialize;
+use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::io;
+use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
+use std::time::{Duration, Instant};
 
 /// using sock, sends all messages from `msgs` to their destinations. `msgs` maps the destination to the message to send.
 /// each destination gets `retries` amount of retries before that giving up on that destination (it will actually add it anyway if it arrives late and we are still going)
@@ -16,13 +15,20 @@ use std::collections::VecDeque;
 /// is considered trash/pretends that it never arrived if `pred` returns false.
 /// The return value is Ok(hashmap) mapping destination addresses to their respective received message. An missing entry from the hashmap means that connection timed out.
 /// changes settings on sock
-pub fn send_with_responses<S, D, F>(sock: &UdpSocket, msgs: &HashMap<SocketAddr, &S>, retries: u32, timeout: Duration, pred: F) -> Result<HashMap<SocketAddr, D>>
-where S: Serialize,
-      D: DeserializeOwned,
-      F: Fn(SocketAddr,&D) -> bool
+pub fn send_with_responses<S, D, F>(
+    sock: &UdpSocket,
+    msgs: &HashMap<SocketAddr, &S>,
+    retries: u32,
+    timeout: Duration,
+    pred: F,
+) -> Result<HashMap<SocketAddr, D>>
+where
+    S: Serialize,
+    D: DeserializeOwned,
+    F: Fn(SocketAddr, &D) -> bool,
 {
     assert!(!msgs.is_empty(), "msgs in send_with_responses is empty");
-    set_timeout(sock, timeout/10)?;
+    set_timeout(sock, timeout / 10)?;
     let mut res = HashMap::new();
     let mut pending = VecDeque::new();
     for (adr, m) in msgs.iter() {
@@ -30,8 +36,7 @@ where S: Serialize,
         send(&sock, m, adr)?;
     }
 
-    'outer:
-    loop {
+    'outer: loop {
         loop {
             if pending.is_empty() {
                 break 'outer;
@@ -56,7 +61,7 @@ where S: Serialize,
                     res.insert(sender, data);
                 }
                 debug!("pred failed");
-            },
+            }
             Err(NetworkError::NoMessage) | Err(NetworkError::Timeout) => (),
             Err(ioerror) => return Err(ioerror),
         }
@@ -68,10 +73,18 @@ where S: Serialize,
 /// only a response that fulfills `pred` is accepted
 /// attempts this `retries` times before returning NetworkError::Timeout
 /// changes settings on sock
-pub fn send_with_response<T, U, F>(sock: &UdpSocket, msg: &T, dst: SocketAddr, retries: u32, total_time: Duration, pred: F) -> Result<U>
-where T: Serialize,
-      U: DeserializeOwned,
-      F: Fn(&U) -> bool
+pub fn send_with_response<T, U, F>(
+    sock: &UdpSocket,
+    msg: &T,
+    dst: SocketAddr,
+    retries: u32,
+    total_time: Duration,
+    pred: F,
+) -> Result<U>
+where
+    T: Serialize,
+    U: DeserializeOwned,
+    F: Fn(&U) -> bool,
 {
     let from_same = |sender, msg: &U| sender == dst && pred(msg);
     let mut tryy = 1;
@@ -83,7 +96,7 @@ where T: Serialize,
             Err(ioerror) => return Err(ioerror),
         }
         if tryy >= retries {
-            return Err(NetworkError::Timeout)
+            return Err(NetworkError::Timeout);
         }
         tryy += 1;
     }
@@ -91,28 +104,36 @@ where T: Serialize,
 
 /// open a socket on any port for udp
 pub fn open_any() -> Result<UdpSocket> {
-   let my_adr = super::find_internet_interface()?;
-   Ok(UdpSocket::bind(super::from_ipv4(my_adr, 0))?)
+    let my_adr = super::find_internet_interface()?;
+    Ok(UdpSocket::bind(super::from_ipv4(my_adr, 0))?)
 }
 
 /// can the message be transmitted in one packet?
 /// ( ͡° ͜ʖ ͡°)
 pub fn will_fit<T>(msg: &T) -> bool
-where T: Serialize
+where
+    T: Serialize,
 {
-    serialized_size(msg).map(|s| s <= MAX_UDP as u64).unwrap_or(false)
+    serialized_size(msg)
+        .map(|s| s <= MAX_UDP as u64)
+        .unwrap_or(false)
 }
 
 /// this is basically a wrapper around UdpSocket::send_to that takes something that is
 /// serializable instead of a slice of bytes.
 /// If msg becomes too large, then an NetworkError::NoMessage is returned
 pub fn send<T, A>(sock: &UdpSocket, msg: &T, to: A) -> Result<usize>
-where T: Serialize,
-      A: ToSocketAddrs
+where
+    T: Serialize,
+    A: ToSocketAddrs,
 {
     let seri = serialize(msg).expect("could not serialize msg");
     if seri.len() > MAX_UDP {
-        error!("message to large! {} bytes is larger than {}", seri.len(), MAX_UDP);
+        error!(
+            "message to large! {} bytes is larger than {}",
+            seri.len(),
+            MAX_UDP
+        );
         return Err(NetworkError::NoMessage);
     }
     Ok(sock.send_to(seri.as_slice(), to)?)
@@ -125,21 +146,25 @@ where T: Serialize,
 ///          Err(NetworkError::Timeout) if it timed out or if socket is in nonblocking and was empty
 ///          Err(NetworkError::IOError(e)) if a serious error occured
 pub fn recv_once<T>(sock: &UdpSocket) -> Result<(SocketAddr, T)>
-where T: DeserializeOwned
+where
+    T: DeserializeOwned,
 {
     let mut buf = [0; MAX_UDP];
-    let (read, sender) = sock.recv_from(&mut buf)
-        .map_err(|e| {
-            if let io::ErrorKind::WouldBlock = e.kind() {
-                NetworkError::Timeout
-            } else if let io::ErrorKind::TimedOut = e.kind() {
-                NetworkError::Timeout
-            } else {
-                NetworkError::from(e)
-            }
-        })?;
+    let (read, sender) = sock.recv_from(&mut buf).map_err(|e| {
+        if let io::ErrorKind::WouldBlock = e.kind() {
+            NetworkError::Timeout
+        } else if let io::ErrorKind::TimedOut = e.kind() {
+            NetworkError::Timeout
+        } else {
+            NetworkError::from(e)
+        }
+    })?;
     if read >= buf.len() {
-        warn!("received a message that was too big {} == {}", read, buf.len());
+        warn!(
+            "received a message that was too big {} == {}",
+            read,
+            buf.len()
+        );
         return Err(NetworkError::NoMessage);
     }
 
@@ -147,8 +172,8 @@ where T: DeserializeOwned
         Ok(res) => res,
         Err(_) => {
             warn!("received a message that couldn't be deserialized");
-            return Err(NetworkError::NoMessage)
-        },
+            return Err(NetworkError::NoMessage);
+        }
     };
 
     Ok((sender, de))
@@ -157,7 +182,8 @@ where T: DeserializeOwned
 /// runs `recv_once` until it returns something successful
 /// changes settings on sock
 pub fn recv_until_msg<T>(sock: &UdpSocket) -> Result<(SocketAddr, T)>
-where T: DeserializeOwned
+where
+    T: DeserializeOwned,
 {
     set_blocking(sock)?;
     loop {
@@ -173,20 +199,25 @@ where T: DeserializeOwned
 /// changes settings on sock
 /// returns NetworkError::Timeout if `timeout` ran out (not exact!)
 /// only returns an Ok if `pred` returns true on the received message
-pub fn recv_until_timeout<T, F>(sock: &UdpSocket, timeout: Duration, pred: F) -> Result<(SocketAddr, T)>
-where T: DeserializeOwned,
-      F: Fn(SocketAddr,&T) -> bool
+pub fn recv_until_timeout<T, F>(
+    sock: &UdpSocket,
+    timeout: Duration,
+    pred: F,
+) -> Result<(SocketAddr, T)>
+where
+    T: DeserializeOwned,
+    F: Fn(SocketAddr, &T) -> bool,
 {
-    set_timeout(sock, timeout/10)?;
+    set_timeout(sock, timeout / 10)?;
     let start = Instant::now();
     loop {
         match recv_once(sock) {
             Ok((sender, data)) => {
-                if pred(sender,&data) {
-                    return Ok((sender, data))
+                if pred(sender, &data) {
+                    return Ok((sender, data));
                 }
                 debug!("pred failed");
-            },
+            }
             Err(NetworkError::NoMessage) | Err(NetworkError::Timeout) => (),
             ioerror => return ioerror,
         }
