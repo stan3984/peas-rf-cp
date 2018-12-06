@@ -35,10 +35,8 @@ impl Ktable {
         let (v1_index, v2_index, found) = self.index_from_id(offer.id);
         if !found {
             self.table[v1_index].insert(v2_index, offer);
-            println!("Inserted {} at [{}][{}]", offer.id, v1_index, v2_index);
             if self.table[v1_index].len() as u32 > self.k{
                 self.table[v1_index].pop();
-                println!("Popped");
             }
         }
     }
@@ -49,7 +47,6 @@ impl Ktable {
         let (v1_index, v2_index, found) = self.index_from_id(id);
         if found {
             self.table[v1_index].remove(v2_index);
-            println!("Removed {} [{}][{}]", id, v1_index, v2_index);
         }
     }
     pub fn delete_entry(&mut self, entry: Entry) {
@@ -60,7 +57,6 @@ impl Ktable {
         if found {
             if entry == self.table[v1_index][v2_index]{
                 self.table[v1_index].remove(v2_index);
-                println!("Removed {} [{}][{}]", entry.id, v1_index, v2_index);
             }
         }
     }
@@ -123,11 +119,6 @@ impl Ktable {
             else{
                 break;
             }
-        }
-        if found {
-            println!("Found {} at [{}][{}]", id, v1_index, v2_index);
-        } else {
-            println!("{} Not found, should be at [{}][{}]", id, v1_index, v2_index);
         }
         (v1_index, v2_index, found)
     }
