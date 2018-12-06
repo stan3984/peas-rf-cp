@@ -1,11 +1,10 @@
-
 extern crate peas_rf_cp;
-
-use std::net::{UdpSocket,SocketAddr};
-use std::env;
 use peas_rf_cp::tracker::server;
 
+extern crate log;
+use log::LevelFilter;
+
 fn main() {
-    peas_rf_cp::common::logger::init_stderr();
+    peas_rf_cp::common::logger::initialize_logger(LevelFilter::Info, false);
     server::start(12345, 600);
 }

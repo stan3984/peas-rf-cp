@@ -1,59 +1,151 @@
+extern crate bincode;
+
+extern crate clap;
+use clap::{App, Arg, ArgMatches};
+
+extern crate log;
+use log::LevelFilter;
 
 extern crate peas_rf_cp;
-
-use peas_rf_cp::common::logger;
-use peas_rf_cp::tracker::api;
-use peas_rf_cp::network::{self,NetworkError};
-use std::env;
-use std::net::ToSocketAddrs;
 use peas_rf_cp::common::id::Id;
+use peas_rf_cp::common::logger;
+
+use std::fs::File;
+use std::io::{self, Read, Write};
+use std::mem;
+
+const ARG_USERNAME: &str = "username";
+const ARG_LOG_LEVEL: &str = "log-level";
+const ARG_LOG_STDERR: &str = "log-stderr";
+const ARG_NEW_ROOM: &str = "new-room";
+const ARG_JOIN_ROOM: &str = "join-room";
+const ARG_TRACKER: &str = "tracker";
 
 fn main() {
-    logger::init_file();
-    // log::info!("Hello, world!");
+    let app = create_app();
+    let matches = app.get_matches();
 
-    // uppdatera oss själva för att sedan lista alla som tracker vet om
+    setup_logging(&matches);
 
-    let args: Vec<_> = env::args().collect();
-    let sock = network::udp::open_any().unwrap();
-    let tracker = args[1].to_socket_addrs().unwrap().next().unwrap();
-
-    println!("tracker: {:?}", tracker);
-    println!("me: {:?}", sock.local_addr().unwrap());
-
-    // update test_id on tracker
-    let test_id = Id::from_u64(12);
-    println!("updating {}", test_id);
-    let dur = match api::update(&sock, test_id, sock.local_addr().unwrap(), tracker) {
-        Err(NetworkError::Timeout) => {
-            println!("tracker not responding :(");
-            std::process::exit(1);
-        },
-        Err(_) => {
-            println!("shshzhshshszzhzzsh");
-            std::process::exit(1);
-        },
-        Ok(ok) => ok,
-    };
-    println!("{} should now stay there for {}s", test_id, dur.as_secs());
-
-    // querying everything
-    let ls = api::LookupSession::new(&sock, tracker, test_id);
-
-    for cur in ls {
-        match cur {
-            Err(NetworkError::Timeout) => {
-                println!("tracker not responding");
-            },
-            Err(_) => {
-                println!("ööööh");
-                return;
-            },
-            Ok(adr) => {
-                println!("{} knows about {}", adr, test_id);
-            }
+    if matches.is_present(ARG_NEW_ROOM) {
+        match create_room(&matches) {
+            Ok(_) => {}
+            Err(x) => log::error!("Failed to create room ({})", x),
+        }
+    } else if matches.is_present(ARG_JOIN_ROOM) {
+        match parse_room(&matches) {
+            Ok(_) => {}
+            Err(x) => log::error!("Failed to parse room ({})", x),
         }
     }
 
-    // log::debug!("Shutting down application...");
+    log::info!("Shutting down");
+}
+
+fn setup_logging<'a>(matches: &ArgMatches<'a>) {
+    let level = match matches.value_of(ARG_LOG_LEVEL) {
+        Some("all") => LevelFilter::max(),
+        Some("trace") => LevelFilter::Trace,
+        Some("debug") => LevelFilter::Debug,
+        Some("info") => LevelFilter::Info,
+        Some("warn") => LevelFilter::Warn,
+        Some("error") => LevelFilter::Error,
+        None => LevelFilter::Off,
+        Some(_) => unreachable!(),
+    };
+
+    let to_file = !matches.is_present(ARG_LOG_STDERR);
+    logger::initialize_logger(level, to_file);
+}
+
+fn create_room<'a>(matches: &ArgMatches<'a>) -> io::Result<()> {
+    let new_room = matches.value_of(ARG_NEW_ROOM);
+    assert!(new_room.is_some());
+
+    let room_name = new_room.unwrap();
+    assert!(room_name.len() > 0);
+
+    let room_id = Id::new_random();
+    let file_name = format!("{}.peas-room", room_name);
+
+    let mut file = File::create(&file_name)?;
+    file.write(&bincode::serialize(&room_id).unwrap()[..])?;
+
+    log::debug!("Created room file `{}`", file_name);
+
+    Ok(())
+}
+
+fn parse_room<'a>(matches: &ArgMatches<'a>) -> io::Result<Id> {
+    let join_room = matches.value_of(ARG_JOIN_ROOM);
+    assert!(join_room.is_some());
+
+    let room_file = join_room.unwrap();
+
+    let mut file = File::open(room_file)?;
+
+    let id = {
+        // note: this code can be simplified but is kept this way in
+        // case we want to write/read more data than just the id
+
+        let mut buffer = vec![0; mem::size_of::<Id>()];
+
+        let room_id = {
+            file.read(&mut buffer)?;
+            bincode::deserialize::<Id>(&buffer).unwrap()
+        };
+
+        log::debug!("Parsed room with id `{}`", room_id);
+        room_id
+    };
+
+    Ok(id)
+}
+
+fn create_app<'a, 'b>() -> App<'a, 'b> {
+    let a = App::new("peas-rf-cp")
+        .version("0.0.0-alpha")
+        .arg(
+            Arg::with_name(ARG_USERNAME)
+                .long("username")
+                .short("u")
+                .help("Username to display")
+                .conflicts_with_all(&["new-room"])
+                .takes_value(true)
+                .requires_all(&[ARG_JOIN_ROOM]),
+        ).arg(
+            Arg::with_name(ARG_LOG_LEVEL)
+                .long("log")
+                .help("Logging level")
+                .takes_value(true)
+                .possible_values(&["all", "trace", "debug", "info", "warn", "error"]),
+        ).arg(
+            Arg::with_name(ARG_LOG_STDERR)
+                .long("log-stderr")
+                .help("Directs logging output to standard error (default is logging to file)")
+                .requires_all(&[ARG_LOG_LEVEL]),
+        ).arg(
+            Arg::with_name(ARG_NEW_ROOM)
+                .long("new-room")
+                .help("Creates a new room file and exits")
+                .takes_value(true)
+                .conflicts_with_all(&[ARG_USERNAME, ARG_JOIN_ROOM]),
+        ).arg(
+            Arg::with_name(ARG_JOIN_ROOM)
+                .long("join")
+                .short("j")
+                .help("Specifies the room to join")
+                .takes_value(true)
+                .conflicts_with_all(&[ARG_NEW_ROOM])
+                .requires_all(&[ARG_USERNAME]),
+        ).arg(
+            Arg::with_name(ARG_TRACKER)
+                .long("tracker")
+                .short("t")
+                .help("Specifies the tracker to connect to")
+                .takes_value(true)
+                .requires_all(&[ARG_JOIN_ROOM]),
+        );
+
+    return a;
 }
