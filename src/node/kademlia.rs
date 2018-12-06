@@ -92,7 +92,7 @@ pub fn id_lookup(sock: UdpSocket, id: Id, myself: Entry, ktable: Arc<Mutex<Ktabl
                 let mut ktab = ktable.lock().unwrap();
                 for before in destinations.keys() {
                     if ! responses.contains_key(&before.get_addr()) {
-                        ktab.delete(*before);
+                        ktab.delete_entry(*before);
                     }
                 }
             }

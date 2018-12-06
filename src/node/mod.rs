@@ -1,7 +1,7 @@
 pub mod nethandle;
-
 mod ktable;
-mod nethandle;
+mod netthread;
+mod kademlia;
 
 use std::net::SocketAddr;
 use common::id::Id;

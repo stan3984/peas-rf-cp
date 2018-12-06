@@ -3,8 +3,6 @@ use std::net::SocketAddr;
 use common::id::Id;
 
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
-// TODO: implement getters
-// TODO: implement new and stuff
 pub struct Entry {
     sock: SocketAddr,
     id: Id,
@@ -19,13 +17,6 @@ pub struct Ktable {
 impl Entry {
     pub fn new(sock: SocketAddr, id: Id) -> Self {
         Entry {sock: sock, id: id}
-    }
-
-}
-
-impl Entry {
-    pub fn new(sock: SocketAddr, id: Id) -> Self {
-        unimplemented!()
     }
     pub fn get_id(&self) -> Id {
         self.id
@@ -53,7 +44,7 @@ impl Ktable {
         }
     }
     pub fn offer_replace(&mut self, offer: Entry) {
-        debug!("ktable deleted {:?}", entry);
+        debug!("ktable deleted {:?}", offer);
         if offer.id == self.id{
             return;
         }
