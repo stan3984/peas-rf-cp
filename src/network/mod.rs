@@ -5,6 +5,7 @@ use std::net::{IpAddr, IpAddr::V4, Ipv4Addr, SocketAddr};
 use std::{error::Error, fmt};
 
 pub mod udp;
+pub mod tcp;
 
 const MAX_UDP: usize = 512;
 pub type Result<T> = std::result::Result<T, NetworkError>;

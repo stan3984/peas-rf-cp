@@ -171,9 +171,9 @@ where
     let de = match deserialize(&buf[..read]) {
         Ok(res) => res,
         Err(_) => {
-            warn!("received a message that couldn't be deserialized");
+            warn!("UDP: received a message that couldn't be deserialized");
             return Err(NetworkError::NoMessage);
-        }
+        },
     };
 
     Ok((sender, de))

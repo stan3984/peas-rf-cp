@@ -111,7 +111,7 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
             Ok(ToNetMsg::NewMsg(msg)) => (), //// TODO: send to all others
             Err(TryRecvError::Empty) => (),
             Err(TryRecvError::Disconnected) => {
-                warn!("I don't have a master any more :(, I will commit suicide");
+                warn!("I don't have a master any more, terminating...");
                 break 'main;
             }
         }
