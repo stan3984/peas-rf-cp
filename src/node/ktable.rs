@@ -34,6 +34,17 @@ impl Ktable {
         }
         let (v1_index, v2_index, found) = self.index_from_id(offer.id);
         if !found {
+            if self.table[v1_index].len() < self.k as usize {
+                self.table[v1_index].insert(v2_index, offer);
+            }
+        }
+    }
+    pub fn offer_replace(&mut self, offer: Entry) {
+        if offer.id == self.id{
+            return;
+        }
+        let (v1_index, v2_index, found) = self.index_from_id(offer.id);
+        if !found {
             self.table[v1_index].insert(v2_index, offer);
             if self.table[v1_index].len() as u32 > self.k{
                 self.table[v1_index].pop();
