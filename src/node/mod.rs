@@ -1,5 +1,5 @@
 mod ktable;
-mod nethandle;
+pub mod nethandle;
 
 use std::net::SocketAddr;
 use common::id::Id;

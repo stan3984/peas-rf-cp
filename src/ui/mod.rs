@@ -1,4 +1,6 @@
 
+use node::nethandle::NetHandle;
+
 use pancurses::*;
 use cursive::*;
 use cursive::align::VAlign::Bottom;
@@ -15,16 +17,28 @@ use std::collections::VecDeque;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+use std::time::SystemTime;
+use std::net::SocketAddr;
 use cursive::view::*;
 use cursive::views::*;
+use common::id::Id;
+use std::cell::Cell;
 
 
-
-
-pub fn cursive_test() {
+pub fn cursive_test(neth: NetHandle) {
 
     let mut cursive = Cursive::ncurses();
 
+    /*
+    let prefix = |msg| {
+        let ts = msg.timestamp;
+        let sn = msg.sender_name;
+        format!("[{} {}] {}", sn, ts, msg)
+    };
+    */
+
+    cursive.set_fps(10);
+    //cursive.cb_sink().send();
 
     let mut cur = cursive.current_theme().clone();
     cur.palette[Background] = Rgb(64,64,64);
@@ -33,6 +47,8 @@ pub fn cursive_test() {
     cur.palette[Secondary] = Rgb(64,64,64);
     cur.borders = BorderStyle::Simple;
     cursive.set_theme(cur);
+
+    let history = Vec::new();
 
     cursive.add_layer(LinearLayout::vertical()
         .child(BoxView::new(SizeConstraint::Full,
@@ -48,7 +64,7 @@ pub fn cursive_test() {
                                           .on_pre_event(Key::Enter, |c| {
                                               let mut input = c.find_id::<TextArea>("input").unwrap();
                                               let mut output = c.find_id::<TextView>("output").unwrap();
-                                              output.set_content(input.get_content());
+                                              history.push(neth.send_message(String::from(input.get_content())));
                                               input.set_content("");
                                           }
                                       )))));
