@@ -1,29 +1,34 @@
 
 use node::nethandle::NetHandle;
+use node::Message;
 
-use pancurses::*;
-use cursive::*;
-use cursive::align::VAlign::Bottom;
-use cursive::theme::PaletteColor::*;
-use cursive::theme::Color::*;
-use cursive::theme::BaseColor::*;
-use cursive::theme::BorderStyle;
-use cursive::theme::Theme;
-use cursive::traits::*;
-use cursive::event::{Event, Key};
-use cursive::vec::Vec2;
-use cursive::{Cursive, Printer};
-use std::collections::VecDeque;
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
-use std::time::SystemTime;
-use std::net::SocketAddr;
-use cursive::view::*;
-use cursive::views::*;
-use common::id::Id;
-use std::cell::Cell;
+#[allow(unused_imports)] use pancurses::*;
+#[allow(unused_imports)] use cursive::*;
+#[allow(unused_imports)] use cursive::align::VAlign::Bottom;
+#[allow(unused_imports)] use cursive::theme::PaletteColor::*;
+#[allow(unused_imports)] use cursive::theme::Color::*;
+#[allow(unused_imports)] use cursive::theme::BaseColor::*;
+#[allow(unused_imports)] use cursive::theme::BorderStyle;
+#[allow(unused_imports)] use cursive::theme::Theme;
+#[allow(unused_imports)] use cursive::traits::*;
+#[allow(unused_imports)] use cursive::event::{Event, Key};
+#[allow(unused_imports)] use cursive::vec::Vec2;
+#[allow(unused_imports)] use cursive::{Cursive, Printer};
+#[allow(unused_imports)] use std::collections::VecDeque;
+#[allow(unused_imports)] use std::sync::mpsc;
+#[allow(unused_imports)] use std::thread;
+#[allow(unused_imports)] use std::time::Duration;
+#[allow(unused_imports)] use std::time::SystemTime;
+#[allow(unused_imports)] use std::net::SocketAddr;
+#[allow(unused_imports)] use cursive::view::*;
+#[allow(unused_imports)] use cursive::views::*;
+#[allow(unused_imports)] use common::id::Id;
+#[allow(unused_imports)] use std::cell::Cell;
+#[allow(unused_imports)] use std::sync::Arc;
+#[allow(unused_imports)] use std::sync::Mutex;
 
+
+static history_mutex: Option<Arc<Mutex<Vec<Message>>>> = None;
 
 pub fn cursive_test(neth: NetHandle) {
 
@@ -48,8 +53,6 @@ pub fn cursive_test(neth: NetHandle) {
     cur.borders = BorderStyle::Simple;
     cursive.set_theme(cur);
 
-    let history = Vec::new();
-
     cursive.add_layer(LinearLayout::vertical()
         .child(BoxView::new(SizeConstraint::Full,
                             SizeConstraint::Full,
@@ -61,10 +64,12 @@ pub fn cursive_test(neth: NetHandle) {
                             Panel::new(OnEventView::new(TextArea::new()
                                                      .content("")
                                                      .with_id("input"))
-                                          .on_pre_event(Key::Enter, |c| {
+                                          .on_pre_event(Key::Enter, move |c| {
                                               let mut input = c.find_id::<TextArea>("input").unwrap();
                                               let mut output = c.find_id::<TextView>("output").unwrap();
-                                              history.push(neth.send_message(String::from(input.get_content())));
+                                              history_mutex.unwrap().lock()
+                                                           .unwrap()
+                                                           .push(neth.send_message(String::from(input.get_content())).unwrap());
                                               input.set_content("");
                                           }
                                       )))));
