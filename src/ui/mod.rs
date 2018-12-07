@@ -28,9 +28,13 @@ use node::Message;
 #[allow(unused_imports)] use std::sync::Mutex;
 
 
-static history_mutex: Option<Arc<Mutex<Vec<Message>>>> = None;
+static mut history: Option<Vec<Message>> = None;
 
 pub fn cursive_test(neth: NetHandle) {
+
+    unsafe {
+        history = Some(Vec::new());
+    }
 
     let mut cursive = Cursive::ncurses();
 
@@ -64,12 +68,12 @@ pub fn cursive_test(neth: NetHandle) {
                             Panel::new(OnEventView::new(TextArea::new()
                                                      .content("")
                                                      .with_id("input"))
-                                          .on_pre_event(Key::Enter, move |c| {
+                                          .on_pre_event(Key::Enter, |c| {
                                               let mut input = c.find_id::<TextArea>("input").unwrap();
                                               let mut output = c.find_id::<TextView>("output").unwrap();
-                                              history_mutex.unwrap().lock()
-                                                           .unwrap()
-                                                           .push(neth.send_message(String::from(input.get_content())).unwrap());
+                                              unsafe {
+                                                  history.unwrap().push(neth.send_message(String::from(input.get_content())).unwrap());
+                                              }
                                               input.set_content("");
                                           }
                                       )))));
