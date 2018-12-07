@@ -1,6 +1,7 @@
 
 use std::net::SocketAddr;
 use common::id::Id;
+use rand::Rng;
 
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug)]
 // TODO: implement getters
@@ -112,6 +113,38 @@ impl Ktable {
             }
         }
         return result;
+    }
+    pub fn random(&self) -> Option<Entry>{
+        //Create weightings for selecting v1
+        let mut weightings = vec![0; 64];
+        let mut total = 0;
+        for i in 0..64{
+            let weight = self.table[i].len();
+            weightings[i] = weight;
+            total += weight;
+        }
+        if total == 0 {
+            return None;
+        }
+        let mut rng = rand::thread_rng();
+        let mut num = rng.gen_range(0, total) + 1; //[1 - total]
+        let mut v1_selection = 0;
+        for i in 0..64{
+            let weighting = weightings[i];
+            if weighting as u32 != 0 {
+                if num > weighting {
+                    num -= weighting;
+                }
+                else {
+                    v1_selection = i;
+                    break;
+                }
+            }
+        }
+
+        //randomly select result from v1
+        let v2_selection = rng.gen_range(0, weightings[v1_selection]);
+        Some(self.table[v1_selection][v2_selection])
     }
     fn index_from_id(&self, id: Id) -> (usize, usize, bool){
         let mut found = false;
