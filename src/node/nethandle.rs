@@ -114,7 +114,7 @@ impl NetHandle {
     /// returns Ok(Some(msg)) if it had something to say
     /// returns Ok(None) if it didn't
     /// Err(SendError::Disconnected) if the nethandle died
-    pub fn read(&mut self) -> Result<Option<FromNetMsg>, SendError> {
+    pub fn read(&self) -> Result<Option<FromNetMsg>, SendError> {
         match self.channel_out.try_recv() {
             Ok(ok) => Ok(Some(ok)),
             Err(TryRecvError::Empty) => Ok(None),
@@ -124,13 +124,13 @@ impl NetHandle {
 
     /// sends `msg` to all other connected nodes.
     /// returns the message struct that was sent
-    pub fn send_message(&mut self, msg: String) -> Result<Message, SendError> {
+    pub fn send_message(&self, msg: String) -> Result<Message, SendError> {
         let m = Message::new(msg, self.my_id, self.my_name.clone(), true);
         self.send_to_net(ToNetMsg::NewMsg(m.clone()))?;
         Ok(m)
     }
 
-    fn send_to_net(&mut self, msg: ToNetMsg) -> Result<(), SendError> {
+    fn send_to_net(&self, msg: ToNetMsg) -> Result<(), SendError> {
         match self.channel_in.send(msg) {
             Ok(x) => Ok(x),
             Err(se) => {

@@ -2,15 +2,44 @@ pub mod nethandle;
 mod ktable;
 mod netthread;
 mod kademlia;
+mod cache;
 
 use std::net::SocketAddr;
 use common::id::Id;
 use std::time::SystemTime;
+use network::tcp;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TcpBroadcast {
+    hash: u64,
+    payload: TcpPayload,
+}
+
+impl TcpBroadcast {
+    pub fn new(pay: TcpPayload) -> Self {
+        TcpBroadcast{hash: tcp::get_hash(), payload: pay}
+    }
+    pub fn from_message(msg: Message) -> Self {
+        TcpBroadcast::new(TcpPayload::Msg(msg))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TcpPayload {
+    IsAlive(Id),
+    Msg(Message),
+}
 
 #[derive(Debug, Clone)]
 pub enum FromNetMsg {
     Error(Option<String>),
     NewMsg(Message),
+}
+
+impl FromNetMsg {
+    pub fn from_message(msg: Message) -> Self {
+        FromNetMsg::NewMsg(msg)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -20,7 +49,7 @@ pub enum ToNetMsg {
     NewMsg(Message)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     msg: String,
     sender_id: Id,

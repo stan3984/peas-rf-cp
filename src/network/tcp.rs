@@ -4,7 +4,9 @@ use bincode::{serialize,deserialize,serialized_size};
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 use std::io::{self,Write};
+use std::time::Duration;
 use super::*;
+use rand::RngCore;
 
 /// open a TCP listener on any port as non-blocking
 pub fn open_any() -> Result<TcpListener> {
@@ -12,6 +14,24 @@ pub fn open_any() -> Result<TcpListener> {
     let list = TcpListener::bind(super::from_ipv4(my_adr, 0))?;
     list.set_nonblocking(true)?;
     Ok(list)
+}
+
+pub fn connect(addr: SocketAddr) -> Result<TcpStream> {
+    Ok(TcpStream::connect(addr)?)
+}
+
+/// accepts a stream
+pub fn accept(list: &TcpListener) -> Result<TcpStream> {
+    let (stream, _) = list.accept().map_err(|e| {
+        if let io::ErrorKind::WouldBlock = e.kind() {
+            NetworkError::Timeout
+        } else {
+            NetworkError::from(e)
+        }
+    })?;
+    stream.set_nonblocking(false)?;
+    // stream.set_read_timeout(Some(dur))?;
+    Ok(stream)
 }
 
 /// this is basically a wrapper around UdpSocket::send_to that takes something that is
@@ -54,3 +74,8 @@ where T: DeserializeOwned
     Ok(de)
 }
 
+/// get random u64 hash
+pub fn get_hash() -> u64 {
+    let mut rng = rand::thread_rng();
+    rng.next_u64()
+}

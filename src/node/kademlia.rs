@@ -54,7 +54,7 @@ pub fn id_lookup(sock: UdpSocket, id: Id, myself: Entry, ktable: Arc<Mutex<Ktabl
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         let mut visited: HashSet<SocketAddr> = HashSet::new();
-        let mut best: Vec<Entry> = Vec::with_capacity(K);
+        let mut best = Ktable::new(K as u32, id);
         let msg = KadMsg::Lookup(id, myself);
         let mut destinations = HashMap::new();
 
@@ -64,6 +64,9 @@ pub fn id_lookup(sock: UdpSocket, id: Id, myself: Entry, ktable: Arc<Mutex<Ktabl
         }
 
         loop {
+            if destinations.is_empty() {
+                break;
+            }
             // ask all destinations
             let responses = udp::send_with_responses(
                 &sock,
@@ -78,11 +81,6 @@ pub fn id_lookup(sock: UdpSocket, id: Id, myself: Entry, ktable: Arc<Mutex<Ktabl
                 visited.insert(d.get_addr());
             }
 
-            // TODO: gör best till en ktable
-            // 1) använd ktab som best
-            // 2) uppdatera båda i tandemn
-            // 3) spara ändringarna och applya dem i slutet till ktab
-
             // process all responses
             for (_, resp) in responses.iter() {
                 if let KadMsg::Answer(ans) = resp {
@@ -90,7 +88,7 @@ pub fn id_lookup(sock: UdpSocket, id: Id, myself: Entry, ktable: Arc<Mutex<Ktabl
                     for a in ans {
                         if ! visited.contains(&a.get_addr()) {
                             ktab.offer(*a);
-                            insert_into_best(&mut best, *a, id);
+                            best.offer(*a);
                         }
                     }
                 } else {
@@ -104,23 +102,25 @@ pub fn id_lookup(sock: UdpSocket, id: Id, myself: Entry, ktable: Arc<Mutex<Ktabl
                 for before in destinations.keys() {
                     if ! responses.contains_key(&before.get_addr()) {
                         ktab.delete_entry(*before);
+                        best.delete_entry(*before);
                     }
                 }
             }
 
-            if has_looked_at_all(&visited, &best) {
+            let kbest = best.get(K as u32);
+            if has_looked_at_all(&visited, &kbest) {
                 break;
             } else {
                 // if 10 gå tillbaka till början igen
                 destinations.clear();
-                for b in best.iter() {
+                for b in kbest.iter() {
                     if ! visited.contains(&b.get_addr()) {
                         destinations.insert(*b, &msg);
                     }
                 }
             }
         }
-        tx.send(best).expect("caller killed its receive end");
+        tx.send(best.get(K as u32)).expect("caller killed its receive end");
     });
     rx
 }
@@ -133,34 +133,6 @@ fn has_looked_at_all(visited: &HashSet<SocketAddr>, best: &Vec<Entry>) -> bool {
         }
     }
     true
-}
-
-/// inserts `ele` into `best` if `ele` is closer to `id` than any other
-/// entry in `best`. `ele` replaces another entry in `best` if `best`
-/// is full.
-/// does nothing if `ele` already is in `best`
-fn insert_into_best(best: &mut Vec<Entry>, ele: Entry, id: Id) {
-    assert!(best.capacity() > 0, "best vec size 0");
-    if best.contains(&ele) {
-        return;
-    }
-    if best.len() < best.capacity() {
-        best.push(ele);
-    } else {
-        let mut worst = 0;
-        let mut worst_dist = id.distance(&best[worst].get_id());
-        for i in 1..best.len() {
-            let temp = id.distance(&best[i].get_id());
-            if temp > worst_dist {
-                worst_dist = temp;
-                worst = i;
-            }
-        }
-
-        if ele.get_id().distance(&id) < worst_dist {
-            best[worst] = ele;
-        }
-    }
 }
 
 /// queries all trackers and returns the first bootstrap node that is alive

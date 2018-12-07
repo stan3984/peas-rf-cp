@@ -54,7 +54,19 @@ fn run(username: String, room_id: Id, tracker: String) {
                               username,
                               room_id,
                               tracker.to_socket_addrs().unwrap().collect());
-    std::thread::sleep(std::time::Duration::from_secs(1000000));
+    let mut asdasd = 1;
+    loop {
+        neth.send_message(asdasd.to_string()).unwrap();
+        asdasd += 1;
+        loop {
+            match neth.read() {
+                Ok(Some(_)) => (),
+                Ok(None) => break,
+                Err(_) => panic!(),
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5000));
+    }
 }
 
 fn setup_logging<'a>(matches: &ArgMatches<'a>) {
