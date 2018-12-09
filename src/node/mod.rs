@@ -9,6 +9,9 @@ use common::id::Id;
 use std::time::SystemTime;
 use network::tcp;
 
+const KAD_SERVICE: u32 = 1;
+const BROADCAST_SERVICE: u32 = 2;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TcpBroadcast {
     hash: u64,

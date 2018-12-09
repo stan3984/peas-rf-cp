@@ -227,6 +227,22 @@ where
     }
 }
 
+/// removes all pending packets
+/// changes settings on sock
+pub fn clear(sock: &UdpSocket) -> io::Result<()> {
+    set_nonblocking(sock)?;
+    let mut buf = [0;0];
+    loop {
+        match sock.recv_from(&mut buf) {
+            Ok(_) => (),
+            Err(ref e) if io::ErrorKind::WouldBlock == e.kind() => break,
+            Err(ref e) if io::ErrorKind::TimedOut == e.kind() => break,
+            Err(e) => return Err(e),
+        };
+    }
+    Ok(())
+}
+
 pub fn set_nonblocking(sock: &UdpSocket) -> io::Result<()> {
     sock.set_nonblocking(true)
 }

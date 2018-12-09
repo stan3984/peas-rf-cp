@@ -10,6 +10,7 @@ use std::sync::{Arc,Mutex};
 use std::thread;
 use std::collections::{HashMap,HashSet};
 use std::sync::mpsc;
+use network::udpmanager as UM;
 
 const LOOKUP_SIZE: usize = 5;
 const K: usize = 3;
@@ -42,102 +43,158 @@ impl KadMsg {
     }
 }
 
+/// represents an ongoing id lookup
+pub struct IdLookup<'a> {
+    udpman: &'a UM::Manager,
+    visited: HashSet<SocketAddr>,
+    best: Ktable,
+    ktable: Arc<Mutex<Ktable>>,
+    msg: KadMsg,
+    cur: Option<UM::SendHandle<KadMsg>>,
+    map: HashMap<SocketAddr, Id>,
+}
+
+impl<'a> IdLookup<'a> {
+    /// initializes and starts an id lookup on `lookup_id`
+    /// It will update `ktable` continously
+    pub fn new(udpman: &'a UM::Manager, lookup_id: Id, myself: Entry, ktable: Arc<Mutex<Ktable>>) -> Self {
+        let msg = KadMsg::Lookup(lookup_id, myself);
+
+        let initial: HashMap<SocketAddr, Id> = ktable.lock().unwrap()
+            .closest_to(2*K as u32, lookup_id)
+            .into_iter()
+            .map(|e| (e.get_addr(), e.get_id()))
+            .collect();
+
+        let sendh = UM::send(
+            udpman,
+            &msg,
+            initial.keys().map(|k| *k).collect(),
+            super::KAD_SERVICE
+        );
+
+        IdLookup {
+            udpman: udpman,
+            visited: HashSet::new(),
+            best: Ktable::new(K as u32, lookup_id),
+            ktable: ktable,
+            msg: msg,
+            cur: Some(sendh),
+            map: initial,
+        }
+    }
+
+    /// is the lookup done?
+    pub fn is_done(&self) -> bool {
+        self.cur.is_none()
+    }
+
+    /// call this over and over until it is done
+    pub fn update(&mut self) {
+        self.tick(false);
+    }
+
+    /// block the thread and wait for the lookup to finish
+    pub fn update_wait(&mut self) {
+        while !self.is_done() {
+            self.tick(true);
+        }
+    }
+
+    fn tick(&mut self, block: bool) {
+        if self.is_done() {
+            return
+        }
+
+        if block {
+            self.cur.as_mut().unwrap().update_wait();
+        } else {
+            self.cur.as_mut().unwrap().update();
+        }
+
+        if !self.cur.as_ref().unwrap().is_done() {
+            return;
+        }
+
+        // say that we have visited all destinations
+        for c in self.cur.as_mut().unwrap().iter() {
+            self.visited.insert(*c);
+        }
+
+        // process all responses
+        {
+            let mut ktab = self.ktable.lock().unwrap();
+            for c in self.cur.as_ref().unwrap().iter() {
+                // remove dead
+                if self.cur.as_ref().unwrap().is_dead(c) {
+                    let before = self.map.get(c).unwrap();
+                    ktab.delete_id(*before);
+                    self.best.delete_id(*before);
+                } else {
+                    // is alive, add it
+                    if let KadMsg::Answer(ans) = self.cur.as_ref().unwrap().borrow_answer(c) {
+                        for a in ans {
+                            if !self.visited.contains(&a.get_addr()) {
+                                ktab.offer(*a);
+                                self.best.offer(*a);
+                            }
+                        }
+                    } else {
+                        error!("id lookup got something that was not KadMsg::Answer");
+                    }
+                }
+            }
+        }
+
+        // start a new round
+        let all = self.best.get(u32::max_value());
+        let kbest = &all[..std::cmp::min(all.len(), K+1)];
+        if self.has_looked_at_all(kbest) {
+            self.cur = None;
+        } else {
+            self.map.clear();
+            for b in all.iter() {
+                if self.map.len() >= K {
+                    break;
+                }
+                if !self.visited.contains(&b.get_addr()) {
+                    self.map.insert(b.get_addr(), b.get_id());
+                }
+            }
+            self.cur = Some(UM::send(
+                self.udpman,
+                &self.msg,
+                self.map.keys().map(|k| *k).collect(),
+                super::KAD_SERVICE
+            ));
+        }
+    }
+
+    /// is every entry in `best` inside `visited`?
+    fn has_looked_at_all(&self, best: &[Entry]) -> bool {
+        for x in best.iter() {
+            if !self.visited.contains(&x.get_addr()) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// turns this lookup into the actual answer
+    pub fn into_answer(self) -> Vec<Entry> {
+        self.best.get(K as u32)
+    }
+}
+
 /// creates a ktable in a mutex for cross thread use
 pub fn create_ktable(my_id: Id) -> Arc<Mutex<Ktable>> {
     Arc::new(Mutex::new(Ktable::new(K as u32, my_id)))
 }
 
-/// starts a lookup of `id` in a separate thread. `ktable` is continously updated with new nodes and removal of dead ones.
-/// returns the K nodes that are the closest to `id`
-pub fn id_lookup(sock: UdpSocket, id: Id, myself: Entry, ktable: Arc<Mutex<Ktable>>) -> mpsc::Receiver<Vec<Entry>> {
-    // TODO: clear socket or remove all old packages?
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let mut visited: HashSet<SocketAddr> = HashSet::new();
-        let mut best = Ktable::new(K as u32, id);
-        let msg = KadMsg::Lookup(id, myself);
-        let mut destinations = HashMap::new();
-
-        let initial = ktable.lock().unwrap().closest_to(10, id);
-        for ent in initial.into_iter() {
-            destinations.insert(ent, &msg);
-        }
-
-        loop {
-            if destinations.is_empty() {
-                break;
-            }
-            // ask all destinations
-            let responses = udp::send_with_responses(
-                &sock,
-                &destinations.iter().map(|(k,v)| (k.get_addr(), v)).collect(),
-                3,
-                Duration::from_millis(500),
-                |_, m: &KadMsg| m.is_answer()
-            ).expect("io error in id_lookup");
-
-            // say that we have visited all destinations
-            for d in destinations.keys() {
-                visited.insert(d.get_addr());
-            }
-
-            // process all responses
-            for (_, resp) in responses.iter() {
-                if let KadMsg::Answer(ans) = resp {
-                    let mut ktab = ktable.lock().unwrap();
-                    for a in ans {
-                        if ! visited.contains(&a.get_addr()) {
-                            ktab.offer(*a);
-                            best.offer(*a);
-                        }
-                    }
-                } else {
-                    unreachable!();
-                }
-            }
-
-            // remove dead connections from ktable
-            {
-                let mut ktab = ktable.lock().unwrap();
-                for before in destinations.keys() {
-                    if ! responses.contains_key(&before.get_addr()) {
-                        ktab.delete_entry(*before);
-                        best.delete_entry(*before);
-                    }
-                }
-            }
-
-            let kbest = best.get(K as u32);
-            if has_looked_at_all(&visited, &kbest) {
-                break;
-            } else {
-                // if 10 gå tillbaka till början igen
-                destinations.clear();
-                for b in kbest.iter() {
-                    if ! visited.contains(&b.get_addr()) {
-                        destinations.insert(*b, &msg);
-                    }
-                }
-            }
-        }
-        tx.send(best.get(K as u32)).expect("caller killed its receive end");
-    });
-    rx
-}
-
-/// is every entry in `best` inside `visited`?
-fn has_looked_at_all(visited: &HashSet<SocketAddr>, best: &Vec<Entry>) -> bool {
-    for x in best.iter() {
-        if ! visited.contains(&x.get_addr()) {
-            return false;
-        }
-    }
-    true
-}
-
 /// queries all trackers and returns the first bootstrap node that is alive
 /// returns Err(NetworkError::Timeout) if no tracker responded
-pub fn find_bootstrapper(sock: &UdpSocket, room_id: Id, trackers: &Vec<SocketAddr>) -> Result<Option<(SocketAddr, Id)>> {
+// TODO: update tracker to remove `sock`
+pub fn find_bootstrapper(udpman: &UM::Manager, sock: &UdpSocket, room_id: Id, trackers: &Vec<SocketAddr>) -> Result<Option<(SocketAddr, Id)>> {
     let mut timedout = 0;
     'outer:
     for track in trackers.iter() {
@@ -145,7 +202,7 @@ pub fn find_bootstrapper(sock: &UdpSocket, room_id: Id, trackers: &Vec<SocketAdd
         for b in sess {
             match b {
                 Ok(adr) => {
-                    if let Some(id) = is_alive(sock, adr)? {
+                    if let Some(id) = is_alive(udpman, adr) {
                         return Ok(Some((adr, id)));
                     }
                 },
@@ -166,43 +223,70 @@ pub fn find_bootstrapper(sock: &UdpSocket, room_id: Id, trackers: &Vec<SocketAdd
 }
 
 /// simply checks whether `adr` is an alive kademlia node and returns its id
-pub fn is_alive(sock: &UdpSocket, adr: SocketAddr) -> Result<Option<Id>> {
-    match udp::send_with_response(sock, &KadMsg::Ping, adr, 3, Duration::from_millis(500), |msg: &KadMsg| msg.is_pong()) {
-        Ok(KadMsg::Pong(id)) => return Ok(Some(id)),
-        Err(NetworkError::Timeout) => return Ok(None),
-        Err(e) => return Err(e),
-        Ok(_) => unreachable!(),
-    }
+pub fn is_alive(udpman: &UM::Manager, adr: SocketAddr) -> Option<Id> {
 
+    let mut sendh =
+        UM::send(
+            udpman,
+            &KadMsg::Ping,
+            vec![adr],
+            super::KAD_SERVICE
+        );
+
+    sendh.update_wait();
+
+    match sendh.get_single_answer() {
+        Some(KadMsg::Pong(id)) => Some(id),
+        Some(_) => {warn!("answer was not Pong"); None},
+        None => None,
+    }
 }
 
-/// handles one kademlia message
-/// times out after `timeout`
-pub fn handle_msg(sock: &UdpSocket, my_id: Id, timeout: Duration, ktable: Arc<Mutex<Ktable>>) -> Result<()> {
-    match udp::recv_until_timeout(sock, timeout, |_,_| true) {
-        Ok((sender, KadMsg::Ping)) => {
-            debug!("{} pinged me!", sender);
-            udp::send(sock, &KadMsg::Pong(my_id), sender)?;
-            Ok(())
-        },
-        Ok((sender, KadMsg::Lookup(id, requester_entry))) => {
-            // NOTE: sender is a temporary address
-            let closest;
-            {
-                let mut ktab = ktable.lock().unwrap();
-                closest = ktab.closest_to(K as u32, id);
-                ktab.offer(requester_entry);
+/// handles many kademlia messages
+pub fn handle_msg(servh: &UM::ServiceHandle, my_id: Id, ktable: Arc<Mutex<Ktable>>) -> Result<()> {
+    let mut counter = 10;
+    loop {
+        if counter == 0 {
+            break;
+        } else {
+            counter -= 1;
+        }
+        match UM::service_get(servh) {
+            None => break,
+            Some((KadMsg::Ping, sender, id)) => {
+                debug!("{} pinged me!", sender);
+                UM::service_respond(
+                    servh,
+                    &KadMsg::Pong(my_id),
+                    id,
+                    sender
+                )?;
+            },
+            Some((KadMsg::Lookup(look_id, requester_entry), sender, id)) => {
+                // NOTE: sender is a temporary address
+                let mut closest;
+                {
+                    let mut ktab = ktable.lock().unwrap();
+                    closest = ktab.closest_to(K as u32 + 1, look_id);
+                    ktab.offer(requester_entry);
+                }
+                closest.retain(|e| e.get_id() != requester_entry.get_id());
+                if closest.len() > K {
+                    closest.pop();
+                }
+                let clos_len = closest.len();
+                UM::service_respond(
+                    servh,
+                    &KadMsg::Answer(closest),
+                    id,
+                    sender
+                )?;
+                debug!("{} wanted to lookup {}, i answered with {}/{} nodes", sender, look_id, clos_len, K);
+            },
+            Some(_) => {
+                warn!("someone sent weird KadMsg to kad_service");
             }
-            let clos_len = closest.len();
-            udp::send(sock, &KadMsg::Answer(closest), sender)?;
-            debug!("{} wanted to lookup {}, i answered with {}/{} nodes", sender, id, clos_len, K);
-            Ok(())
-        },
-        Err(NetworkError::Timeout) => return Ok(()),
-        Err(e) => return Err(e),
-        _ => {
-            warn!("received a KadMsg that i shouldn't have gotten");
-            Ok(())
-        },
+        }
     }
+    Ok(())
 }

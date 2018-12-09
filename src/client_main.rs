@@ -56,7 +56,7 @@ fn run(username: String, room_id: Id, tracker: String) {
                               tracker.to_socket_addrs().unwrap().collect());
     let mut asdasd = 1;
     loop {
-        neth.send_message(asdasd.to_string()).unwrap();
+        // neth.send_message(asdasd.to_string()).unwrap();
         asdasd += 1;
         loop {
             match neth.read() {

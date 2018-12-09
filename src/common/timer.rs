@@ -22,11 +22,16 @@ impl Timer {
     pub fn new_expired() -> Self {
         Timer::from_millis(0)
     }
-    /// checks if a timer as run out. Has the precision of whole seconds
+    pub fn get_timeout(&self) -> Duration {
+        self.duration
+    }
+    /// checks if a timer as run out.
     /// `margin` is a percentage to set safety margins
     /// always returns false if disabled
+    /// // TODO: margin not implemented! Duration::mul_f64 is nightly
     pub fn expired(&self, margin: f64) -> bool {
-        self.enabled && Instant::now().duration_since(self.start).as_secs() >= (self.duration.as_secs() as f64 * margin) as u64
+        assert!(margin > 0.0 && margin <= 1.0);
+        self.enabled && Instant::now().duration_since(self.start).checked_sub(self.duration).is_some()
     }
     pub fn disable(&mut self) {
         self.enabled = false;
