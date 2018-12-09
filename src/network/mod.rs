@@ -6,6 +6,7 @@ use std::{error::Error, fmt};
 
 pub mod udp;
 pub mod tcp;
+pub mod udpmanager;
 
 const MAX_UDP: usize = 512;
 pub type Result<T> = std::result::Result<T, NetworkError>;

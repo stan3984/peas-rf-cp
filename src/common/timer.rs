@@ -19,6 +19,9 @@ impl Timer {
     pub fn from_millis(millis: u64) -> Self {
         Timer::new(Duration::from_millis(millis))
     }
+    pub fn new_expired() -> Self {
+        Timer::from_millis(0)
+    }
     /// checks if a timer as run out. Has the precision of whole seconds
     /// `margin` is a percentage to set safety margins
     /// always returns false if disabled
