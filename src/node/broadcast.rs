@@ -8,6 +8,7 @@ use common::id::Id;
 use super::{Message,FromNetMsg};
 use std::sync::{Mutex, Arc};
 use std::sync::mpsc::Sender;
+use common::timer::Timer;
 
 const MAX_CONNECTIONS: u32 = 3;
 
@@ -20,6 +21,29 @@ pub struct BroadcastManager<'a> {
     service: UM::ServiceHandle,
     udpman: &'a UM::Manager,
     chan_out: Sender<FromNetMsg>,
+    my_id: Id,
+    ting_timer: Timer,
+    ting_cur: Option<Ting>,
+}
+
+struct Ting {
+    dst: Entry,
+    timer: Timer,
+    sendh: UM::SendHandle<()>,
+    sendh_done: bool
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum MsgPayload {
+    IsAlive(Id),
+    Msg(Message),
+    Ting,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Msg {
+    hash: u64,
+    payload: MsgPayload,
 }
 
 impl<'a> BroadcastManager<'a> {
@@ -27,7 +51,8 @@ impl<'a> BroadcastManager<'a> {
         ktable: Arc<Mutex<Ktable>>,
         service: UM::ServiceHandle,
         udpman: &'a UM::Manager,
-        chan_out: Sender<FromNetMsg>
+        chan_out: Sender<FromNetMsg>,
+        my_id: Id
     ) -> Self {
         BroadcastManager{
             connected: Vec::new(),
@@ -37,6 +62,9 @@ impl<'a> BroadcastManager<'a> {
             service: service,
             udpman: udpman,
             chan_out: chan_out,
+            my_id: my_id,
+            ting_timer: Timer::from_millis(1000*10),
+            ting_cur: None,
         }
     }
 
@@ -75,6 +103,9 @@ impl<'a> BroadcastManager<'a> {
             self.broadcast_a_msg(r, None);
         }
 
+        // update and maybe start ting
+        self.update_ting();
+
         // read and broadcast
         let mut count = 10;
         loop {
@@ -87,16 +118,47 @@ impl<'a> BroadcastManager<'a> {
             if let Some((Msg{hash, payload}, sender, id)) = UM::service_get(&self.service) {
                 UM::service_respond(&self.service, &(), id, sender).unwrap();
                 if self.cache.insert(hash) {
-                    self.broadcast_a_msg(Msg{hash: hash, payload: payload.clone()}, Some(sender));
-                    match payload {
-                        MsgPayload::Msg(mut msg) => {
-                            debug!("received msg: '{}'", msg.get_message());
-                            msg.is_myself = false;
-                            self.chan_out.send(FromNetMsg::from_message(msg)).unwrap();
-                        }
-                        MsgPayload::IsAlive(alive_id) => {
-                            // TODO: 
-                        }
+                    let broadcast =
+                        match payload {
+                            MsgPayload::Msg(ref msg) => {
+                                debug!("received msg: '{}'", msg.get_message());
+                                let mut copy = msg.clone();
+                                copy.is_myself = false;
+                                self.chan_out.send(FromNetMsg::from_message(copy)).unwrap();
+                                true
+                            }
+                            MsgPayload::IsAlive(alive_id) => {
+                                if self.ting_cur.is_some() {
+                                    if self.ting_cur.as_ref().unwrap().dst.get_id() == alive_id {
+                                        self.ting_cur = None;
+                                        self.ting_timer.reset();
+                                        debug!("ting target could be reached");
+                                    }
+                                }
+                                true
+                            }
+                            MsgPayload::Ting => {
+                                debug!("responding to a ting");
+                                let my_id = self.my_id;
+                                self.broadcast_a_msg(
+                                    Msg{
+                                        hash: get_hash(),
+                                        payload: MsgPayload::IsAlive(my_id)
+                                    },
+                                    None
+                                );
+                                false
+                            }
+                        };
+
+                    if broadcast {
+                        self.broadcast_a_msg(
+                            Msg{
+                                hash: hash,
+                                payload: payload
+                            },
+                            Some(sender)
+                        );
                     }
                 }
             }
@@ -120,20 +182,21 @@ impl<'a> BroadcastManager<'a> {
         if self.connected.len() < MAX_CONNECTIONS as usize {
             let closest = ktab.get(MAX_CONNECTIONS);
             for c in closest {
-                if !already_connected(&self.connected, c) {
+                if !self.already_connected(c) {
                     debug!("connected to {}", c.get_addr());
                     self.connected.push(c);
                 }
             }
         }
-        fn already_connected(streams: &Vec<Entry>, e: Entry) -> bool {
-            for s in streams {
-                if s.get_id() == e.get_id() {
-                    return true
-                }
+    }
+
+    fn already_connected(&self, e: Entry) -> bool {
+        for s in self.connected.iter() {
+            if s.get_id() == e.get_id() {
+                return true
             }
-            false
         }
+        false
     }
 
     /// broadcast `msg` to all other nodes
@@ -171,12 +234,63 @@ impl<'a> BroadcastManager<'a> {
     pub fn broadcast(&mut self, msg: Message) {
         self.broadcast_a_msg(Msg::from_message(msg), None);
     }
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Msg {
-    hash: u64,
-    payload: MsgPayload,
+    fn update_ting(&mut self) {
+        // check if ting should be started
+        if self.ting_timer.expired(1.0) {
+            assert!(self.ting_cur.is_none());
+            let mran = self.ktable.lock().unwrap().random();
+
+            if let Some(ran) = mran {
+                self.ting_timer.disable();
+                let m = Msg{hash: get_hash(), payload: MsgPayload::Ting};
+                let sh = UM::send(
+                    &self.udpman,
+                    &m,
+                    vec![ran.get_addr()],
+                    super::BROADCAST_SERVICE
+                );
+                self.cache.insert(m.hash);
+                let mut t = Timer::from_millis(1000*3);
+                t.disable();
+                self.ting_cur = Some(Ting{dst: ran, sendh: sh, sendh_done: false, timer: t});
+                debug!("sending a ting");
+
+            } else {
+                debug!("no one to ting");
+                self.ting_timer.reset();
+            }
+        }
+        // update ongoing ting
+        // TODO: this is the ugliest thing i have ever seen
+        if self.ting_cur.is_some() {
+            if !self.ting_cur.as_ref().unwrap().sendh_done {
+                self.ting_cur.as_mut().unwrap().sendh.update();
+
+                if self.ting_cur.as_ref().unwrap().sendh.is_done() {
+                    self.ting_cur.as_mut().unwrap().sendh_done = true;
+
+                    if self.ting_cur.as_ref().unwrap().sendh.borrow_single_answer().is_some() {
+                        self.ting_cur.as_mut().unwrap().timer.reset();
+                    } else {
+                        let i = self.ting_cur.as_ref().unwrap().dst;
+                        self.ktable.lock().unwrap().delete_id(i.get_id());
+                        self.ting_cur = None;
+                        self.ting_timer.reset();
+                    }
+                }
+            } else if self.ting_cur.as_ref().unwrap().timer.expired(1.0) {
+                let i = self.ting_cur.as_ref().unwrap().dst;
+                if !self.already_connected(i) {
+                    debug!("creating an extra bridge to {} because a ting timed out", i.get_addr());
+                    self.connected.push(i);
+                }
+                self.ting_timer.reset();
+                self.ting_cur = None;
+            }
+        }
+
+    }
 }
 
 impl Msg {
@@ -186,10 +300,4 @@ impl Msg {
     pub fn from_message(msg: Message) -> Self {
         Msg::new(MsgPayload::Msg(msg))
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MsgPayload {
-    IsAlive(Id),
-    Msg(Message),
 }

@@ -54,7 +54,7 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
 
         // ongoing id lookup
         let mut looking: Option<kademlia::IdLookup> = None;
-        let mut broadcast_man = BroadcastManager::new(ktab.clone(), broad_service, &udpman, chan_out);
+        let mut broadcast_man = BroadcastManager::new(ktab.clone(), broad_service, &udpman, chan_out, my_id);
 
         let mut tracker_timer = Timer::new_expired();
         let mut lookup_timer = Timer::from_millis(1000*20);
