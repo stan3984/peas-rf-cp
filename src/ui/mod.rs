@@ -3,26 +3,28 @@ use node::nethandle::NetHandle;
 use node::Message;
 use node::FromNetMsg;
 
-#[allow(unused_imports)] use pancurses::*;
-#[allow(unused_imports)] use cursive::*;
-#[allow(unused_imports)] use cursive::align::VAlign::Bottom;
-#[allow(unused_imports)] use cursive::theme::PaletteColor::*;
-#[allow(unused_imports)] use cursive::theme::Color::*;
-#[allow(unused_imports)] use cursive::theme::BaseColor::*;
-#[allow(unused_imports)] use cursive::theme::BorderStyle;
-#[allow(unused_imports)] use cursive::theme::Theme;
-#[allow(unused_imports)] use cursive::traits::*;
-#[allow(unused_imports)] use cursive::event::{Event, Key};
-#[allow(unused_imports)] use cursive::vec::Vec2;
-#[allow(unused_imports)] use cursive::{Cursive, Printer};
-#[allow(unused_imports)] use std::collections::VecDeque;
-#[allow(unused_imports)] use std::sync::mpsc;
-#[allow(unused_imports)] use std::thread;
-#[allow(unused_imports)] use std::time::Duration;
-#[allow(unused_imports)] use std::time::SystemTime;
-#[allow(unused_imports)] use std::net::SocketAddr;
-#[allow(unused_imports)] use cursive::view::*;
-#[allow(unused_imports)] use cursive::views::*;
+use pancurses::*;
+use cursive::*;
+use cursive::align::VAlign::Bottom;
+use cursive::theme::PaletteColor::*;
+use cursive::theme::Color::*;
+use cursive::theme::BaseColor::*;
+use cursive::theme::BorderStyle;
+use cursive::theme::Theme;
+use cursive::traits::*;
+use cursive::event::{Event, Key};
+use cursive::vec::Vec2;
+use cursive::{Cursive, Printer};
+use std::collections::VecDeque;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+use std::time::SystemTime;
+use chrono::offset::Utc;
+use chrono::DateTime;
+use std::net::SocketAddr;
+use cursive::view::*;
+use cursive::views::*;
 use common::id::Id;
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
@@ -109,5 +111,9 @@ pub fn cursive_main(neth: Arc<Mutex<NetHandle>>) {
 }
 
 fn format_message(msg: &Message) -> String {
-    "omg".to_string()
+    let s_name = msg.get_sender_name();
+    let t_stamp = msg.get_timestamp();
+    let datetime: DateTime<Utc> = t_stamp.into();
+    format!("[{}] {}: {}", datetime.format("%T"), s_name, msg.get_message())
+
 }
