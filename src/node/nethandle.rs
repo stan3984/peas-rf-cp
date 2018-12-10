@@ -1,4 +1,3 @@
-use std::mem;
 use std::net::SocketAddr;
 use std::sync::mpsc::{TryRecvError, Receiver, Sender, channel};
 use std::thread::{self, JoinHandle};
@@ -33,8 +32,8 @@ impl NetHandle {
         let (chan_out_send, chan_out_recv) = channel();
         let (chan_in_send, chan_in_recv) = channel();
 
-        let netusername = user_name.clone();
         let jhandle = thread::spawn(move || {
+            netthread::run(chan_in_recv, chan_out_send, with_output, room_id, trackers);
         });
 
         NetHandle {
@@ -46,11 +45,11 @@ impl NetHandle {
         }
     }
 
-    /// Extracts a `JoinHandle` to the underlying thread.
-    #[inline]
-    pub fn join_handle(&self) -> &JoinHandle<()> {
-        &self.join_handle
-    }
+    // /// Extracts a `JoinHandle` to the underlying thread.
+    // #[inline]
+    // pub fn join_handle(&self) -> &JoinHandle<()> {
+    //     &self.join_handle
+    // }
 
     // /// Closes and drops the input channel.
     // ///
@@ -114,7 +113,7 @@ impl NetHandle {
     /// returns Ok(Some(msg)) if it had something to say
     /// returns Ok(None) if it didn't
     /// Err(SendError::Disconnected) if the nethandle died
-    pub fn read(&mut self) -> Result<Option<FromNetMsg>, SendError> {
+    pub fn read(&self) -> Result<Option<FromNetMsg>, SendError> {
         match self.channel_out.try_recv() {
             Ok(ok) => Ok(Some(ok)),
             Err(TryRecvError::Empty) => Ok(None),
@@ -124,13 +123,13 @@ impl NetHandle {
 
     /// sends `msg` to all other connected nodes.
     /// returns the message struct that was sent
-    pub fn send_message(&mut self, msg: String) -> Result<Message, SendError> {
+    pub fn send_message(&self, msg: String) -> Result<Message, SendError> {
         let m = Message::new(msg, self.my_id, self.my_name.clone(), true);
         self.send_to_net(ToNetMsg::NewMsg(m.clone()))?;
         Ok(m)
     }
 
-    fn send_to_net(&mut self, msg: ToNetMsg) -> Result<(), SendError> {
+    fn send_to_net(&self, msg: ToNetMsg) -> Result<(), SendError> {
         match self.channel_in.send(msg) {
             Ok(x) => Ok(x),
             Err(se) => {

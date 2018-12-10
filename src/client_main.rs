@@ -9,10 +9,12 @@ use log::LevelFilter;
 extern crate peas_rf_cp;
 use peas_rf_cp::common::id::Id;
 use peas_rf_cp::common::logger;
+use peas_rf_cp::node::nethandle::NetHandle;
 
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::mem;
+use std::net::ToSocketAddrs;
 
 const ARG_USERNAME: &str = "username";
 const ARG_LOG_LEVEL: &str = "log-level";
@@ -29,17 +31,42 @@ fn main() {
 
     if matches.is_present(ARG_NEW_ROOM) {
         match create_room(&matches) {
-            Ok(_) => {}
+            Ok(_) => {},
             Err(x) => log::error!("Failed to create room ({})", x),
         }
     } else if matches.is_present(ARG_JOIN_ROOM) {
         match parse_room(&matches) {
-            Ok(_) => {}
+            Ok(room_id) => {
+                run(matches.value_of(ARG_USERNAME).unwrap().to_string(),
+                    room_id,
+                    matches.value_of(ARG_TRACKER).unwrap().to_string());
+            },
             Err(x) => log::error!("Failed to parse room ({})", x),
         }
     }
 
     log::info!("Shutting down");
+}
+
+fn run(username: String, room_id: Id, tracker: String) {
+    let neth = NetHandle::new(true,
+                              Id::from_u64(0),
+                              username,
+                              room_id,
+                              tracker.to_socket_addrs().unwrap().collect());
+    let mut asdasd = 1;
+    loop {
+        neth.send_message(asdasd.to_string()).unwrap();
+        asdasd += 1;
+        loop {
+            match neth.read() {
+                Ok(Some(_)) => (),
+                Ok(None) => break,
+                Err(_) => panic!(),
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5000));
+    }
 }
 
 fn setup_logging<'a>(matches: &ArgMatches<'a>) {
@@ -112,7 +139,7 @@ fn create_app<'a, 'b>() -> App<'a, 'b> {
                 .help("Username to display")
                 .conflicts_with_all(&["new-room"])
                 .takes_value(true)
-                .requires_all(&[ARG_JOIN_ROOM]),
+                .requires_all(&[ARG_JOIN_ROOM, ARG_TRACKER]),
         ).arg(
             Arg::with_name(ARG_LOG_LEVEL)
                 .long("log")
@@ -137,14 +164,14 @@ fn create_app<'a, 'b>() -> App<'a, 'b> {
                 .help("Specifies the room to join")
                 .takes_value(true)
                 .conflicts_with_all(&[ARG_NEW_ROOM])
-                .requires_all(&[ARG_USERNAME]),
+                .requires_all(&[ARG_USERNAME, ARG_TRACKER]),
         ).arg(
             Arg::with_name(ARG_TRACKER)
                 .long("tracker")
                 .short("t")
                 .help("Specifies the tracker to connect to")
                 .takes_value(true)
-                .requires_all(&[ARG_JOIN_ROOM]),
+                .requires_all(&[ARG_JOIN_ROOM, ARG_USERNAME]),
         );
 
     return a;

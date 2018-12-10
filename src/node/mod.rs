@@ -1,14 +1,27 @@
+pub mod nethandle;
 mod ktable;
-mod nethandle;
+mod netthread;
+mod kademlia;
+mod cache;
+mod broadcast;
 
 use std::net::SocketAddr;
 use common::id::Id;
 use std::time::SystemTime;
 
+const KAD_SERVICE: u32 = 1;
+const BROADCAST_SERVICE: u32 = 2;
+
 #[derive(Debug, Clone)]
 pub enum FromNetMsg {
     Error(Option<String>),
     NewMsg(Message),
+}
+
+impl FromNetMsg {
+    pub fn from_message(msg: Message) -> Self {
+        FromNetMsg::NewMsg(msg)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -18,7 +31,7 @@ pub enum ToNetMsg {
     NewMsg(Message)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     msg: String,
     sender_id: Id,

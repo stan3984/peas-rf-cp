@@ -130,6 +130,7 @@ pub fn start(port: u16, ttl: u64) {
 
     loop {
         let (sender, query): (_, TrackQuery) = udp::recv_until_msg(&sock).unwrap();
+        info!("{} spoke to us!", sender);
 
         match query {
             TrackQuery::Update{id, adr} => {

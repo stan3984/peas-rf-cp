@@ -1,11 +1,12 @@
 use pnet::datalink::interfaces;
-use std::net::{IpAddr::V4, Ipv4Addr, SocketAddr, IpAddr};
+use std::io;
+use std::net::{IpAddr, IpAddr::V4, Ipv4Addr, SocketAddr};
 use std::{error::Error, fmt};
-use rand::Rng;
-use std::io::{self, Read};
 
 pub mod udp;
+pub mod udpmanager;
 
+const MAX_UDP: usize = 512;
 pub type Result<T> = std::result::Result<T, NetworkError>;
 
 /// random network error
@@ -47,7 +48,7 @@ impl fmt::Display for NetworkError {
 
 impl From<io::Error> for NetworkError {
     fn from(error: io::Error) -> Self {
-       NetworkError::IOError(error)
+        NetworkError::IOError(error)
     }
 }
 
@@ -56,10 +57,10 @@ impl From<io::Error> for NetworkError {
 pub fn find_internet_interface() -> Result<Ipv4Addr> {
     let ifaces = interfaces();
     for i in ifaces.iter() {
-        if ! i.is_loopback() && i.is_up() {
+        if !i.is_loopback() && i.is_up() {
             for adrs in i.ips.iter() {
                 if let V4(ip4) = adrs.ip() {
-                    return Ok(ip4)
+                    return Ok(ip4);
                 }
             }
         }
@@ -67,13 +68,18 @@ pub fn find_internet_interface() -> Result<Ipv4Addr> {
     Err(NetworkError::Other("couldn't find an available interface"))
 }
 
-/// returns `num` connection candidates, consisting of `adr` and a random port.
-pub fn get_connection_candidates(adr: Ipv4Addr, num: i32) -> Vec<SocketAddr> {
-    let mut rng = rand::thread_rng();
-    let mut res = Vec::new();
+// /// returns `num` connection candidates, consisting of `adr` and a random port.
+// pub fn get_connection_candidates(adr: Ipv4Addr, num: i32) -> Vec<SocketAddr> {
+//     let mut rng = rand::thread_rng();
+//     let mut res = Vec::new();
 
-    for _ in 1..num {
-        res.push(SocketAddr::new(IpAddr::from(adr), rng.gen_range(1024, u16::max_value())));
-    }
-    res
+//     for _ in 1..num {
+//         res.push(SocketAddr::new(IpAddr::from(adr), rng.gen_range(1024, u16::max_value())));
+//     }
+//     res
+// }
+
+/// creates a SocketAddr from an ipv4 address and port
+pub fn from_ipv4(adr: Ipv4Addr, port: u16) -> SocketAddr {
+    SocketAddr::new(IpAddr::from(adr), port)
 }

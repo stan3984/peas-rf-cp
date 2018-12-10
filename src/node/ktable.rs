@@ -3,9 +3,7 @@ use std::net::SocketAddr;
 use common::id::Id;
 use rand::Rng;
 
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug)]
-// TODO: implement getters
-// TODO: implement new and stuff
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct Entry {
     sock: SocketAddr,
     id: Id,
@@ -21,7 +19,12 @@ impl Entry {
     pub fn new(sock: SocketAddr, id: Id) -> Self {
         Entry {sock: sock, id: id}
     }
-
+    pub fn get_id(&self) -> Id {
+        self.id
+    }
+    pub fn get_addr(&self) -> SocketAddr {
+        self.sock
+    }
 }
 
 impl Ktable {
@@ -67,9 +70,7 @@ impl Ktable {
         }
         let (v1_index, v2_index, found) = self.index_from_id(entry.id);
         if found {
-            if entry == self.table[v1_index][v2_index]{
-                self.table[v1_index].remove(v2_index);
-            }
+            self.table[v1_index].remove(v2_index);
         }
     }
     pub fn clear(&mut self) {

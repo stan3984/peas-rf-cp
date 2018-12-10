@@ -5,7 +5,6 @@ use super::*;
 use common::id::Id;
 use network::udp::*;
 use network::Result;
-use network::NetworkError;
 
 pub struct LookupSession<'a> {
     sock: &'a UdpSocket,
@@ -44,7 +43,7 @@ impl<'a> Iterator for LookupSession<'a> {
         let if_lookup = |r: &TrackResp| {r.is_lookup()};
 
         let q = TrackQuery::Lookup{id: self.id, last_lookup: self.last_lookup};
-        let resp = send_with_response(self.sock, &q, self.adr, 3, Duration::from_millis(500), if_lookup);
+        let resp = send_with_response(self.sock, &q, self.adr, 3, Duration::from_millis(50), if_lookup);
 
         match resp {
             Err(e) => {
@@ -75,12 +74,12 @@ pub fn update(sock: &UdpSocket, room: Id, my_adr: SocketAddr, tracker: SocketAdd
     let if_update = |r: &TrackResp| {r.is_update()};
 
     let q = TrackQuery::Update{id: room, adr: my_adr};
-    let resp = send_with_response(sock, &q, tracker, 3, Duration::from_millis(500), if_update)?;
+    let resp = send_with_response(sock, &q, tracker, 3, Duration::from_millis(50), if_update)?;
 
     if let TrackResp::UpdateSuccess{ttl, ..} = resp {
         return Ok(ttl);
     } else {
-        error!("if_update must be incorrect!!");
+        unreachable!("if_update must be incorrect!!");
     }
-    Err(NetworkError::Other("update api failed for some reason (should never happen)"))
+    // Err(NetworkError::Other("update api failed for some reason (should never happen)"))
 }
