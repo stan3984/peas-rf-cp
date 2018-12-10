@@ -49,11 +49,11 @@ fn main() {
 }
 
 fn run(username: String, room_id: Id, tracker: String) {
-    let neth = NetHandle::new(true,
-                              Id::from_u64(0),
-                              username,
-                              room_id,
-                              tracker.to_socket_addrs().unwrap().collect());
+    let neth = NetHandle::new(
+        Id::from_u64(0),
+        username,
+        room_id,
+        tracker.to_socket_addrs().unwrap().collect());
     let mut asdasd = 1;
     loop {
         neth.send_message(asdasd.to_string()).unwrap();

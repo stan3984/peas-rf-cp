@@ -16,7 +16,8 @@ const THREAD_SLEEP: Duration = Duration::from_millis(40);
 
 pub fn run(chan_in: Receiver<ToNetMsg>,
            chan_out: Sender<FromNetMsg>,
-           with_output: bool, // TODO: är antagligen bättre att ha chan_out som en option
+           user_id: Id,
+           user_name: String,
            room_id: Id,
            trackers: Vec<SocketAddr>
 ) {
@@ -53,7 +54,7 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
 
         // ongoing id lookup
         let mut looking: Option<kademlia::IdLookup> = None;
-        let mut broadcast_man = BroadcastManager::new(ktab.clone(), broad_service, &udpman);
+        let mut broadcast_man = BroadcastManager::new(ktab.clone(), broad_service, &udpman, chan_out);
 
         let mut tracker_timer = Timer::new_expired();
         let mut lookup_timer = Timer::from_millis(1000*20);
@@ -112,10 +113,7 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
             }
 
             //handle broadcasts
-            let newmsgs = broadcast_man.update();
-            for m in newmsgs.into_iter() {
-                chan_out.send(FromNetMsg::from_message(m)).unwrap();
-            }
+            broadcast_man.update();
 
             //check if someone wants to say something
             // TODO: loop this to read more stuff?
@@ -126,7 +124,8 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
                 }
                 Ok(ToNetMsg::NewMsg(msg)) => {
                     // debug!("'{}' is broadcasting '{}'", msg.get_sender_name(), msg.get_message());
-                    broadcast_man.broadcast(msg);
+                    let m = Message::new(msg, user_id, user_name.clone(), true);
+                    broadcast_man.broadcast(m);
                 }
                 Err(TryRecvError::Empty) => (),
                 Err(TryRecvError::Disconnected) => {

@@ -16,6 +16,7 @@ const BROADCAST_SERVICE: u32 = 2;
 pub enum FromNetMsg {
     Error(Option<String>),
     NewMsg(Message),
+    NotSent,
 }
 
 impl FromNetMsg {
@@ -28,7 +29,7 @@ impl FromNetMsg {
 pub enum ToNetMsg {
     /// Request termination of the network thread.
     Terminate,
-    NewMsg(Message)
+    NewMsg(String)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

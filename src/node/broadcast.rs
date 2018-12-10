@@ -5,8 +5,9 @@ use node::cache::Cache;
 use network::udpmanager as UM;
 use common::get_hash;
 use common::id::Id;
-use super::Message;
+use super::{Message,FromNetMsg};
 use std::sync::{Mutex, Arc};
+use std::sync::mpsc::Sender;
 
 const MAX_CONNECTIONS: u32 = 3;
 
@@ -18,10 +19,16 @@ pub struct BroadcastManager<'a> {
     ktable: Arc<Mutex<Ktable>>,
     service: UM::ServiceHandle,
     udpman: &'a UM::Manager,
+    chan_out: Sender<FromNetMsg>,
 }
 
 impl<'a> BroadcastManager<'a> {
-    pub fn new(ktable: Arc<Mutex<Ktable>>, service: UM::ServiceHandle, udpman: &'a UM::Manager) -> Self {
+    pub fn new(
+        ktable: Arc<Mutex<Ktable>>,
+        service: UM::ServiceHandle,
+        udpman: &'a UM::Manager,
+        chan_out: Sender<FromNetMsg>
+    ) -> Self {
         BroadcastManager{
             connected: Vec::new(),
             cache: Cache::new(100),
@@ -29,12 +36,12 @@ impl<'a> BroadcastManager<'a> {
             ktable: ktable,
             service: service,
             udpman: udpman,
+            chan_out: chan_out,
         }
     }
 
-    pub fn update(&mut self) -> Vec<Message> {
+    pub fn update(&mut self) {
 
-        let mut newmsgs = Vec::new();
         let mut resend: Vec<Msg> = Vec::new();
 
         // update and remove done active broadcasts
@@ -82,9 +89,10 @@ impl<'a> BroadcastManager<'a> {
                 if self.cache.insert(hash) {
                     self.broadcast_a_msg(Msg{hash: hash, payload: payload.clone()}, Some(sender));
                     match payload {
-                        MsgPayload::Msg(msg) => {
+                        MsgPayload::Msg(mut msg) => {
                             debug!("received msg: '{}'", msg.get_message());
-                            newmsgs.push(msg);
+                            msg.is_myself = false;
+                            self.chan_out.send(FromNetMsg::from_message(msg)).unwrap();
                         }
                         MsgPayload::IsAlive(alive_id) => {
                             // TODO: 
@@ -93,7 +101,6 @@ impl<'a> BroadcastManager<'a> {
                 }
             }
         }
-        newmsgs
     }
 
     fn remove_connection(&mut self, adr: &SocketAddr) {
@@ -133,6 +140,7 @@ impl<'a> BroadcastManager<'a> {
     fn broadcast_a_msg(&mut self, msg: Msg, ban: Option<SocketAddr>) {
         if self.connected.is_empty() {
             warn!("no one to send to, dropping the message");
+            self.chan_out.send(FromNetMsg::NotSent).unwrap();
             return;
         }
 
