@@ -1,6 +1,7 @@
 
 use node::nethandle::NetHandle;
 use node::Message;
+use node::FromNetMsg;
 
 #[allow(unused_imports)] use pancurses::*;
 #[allow(unused_imports)] use cursive::*;
@@ -22,32 +23,57 @@ use node::Message;
 #[allow(unused_imports)] use std::net::SocketAddr;
 #[allow(unused_imports)] use cursive::view::*;
 #[allow(unused_imports)] use cursive::views::*;
-#[allow(unused_imports)] use common::id::Id;
-#[allow(unused_imports)] use std::cell::Cell;
-#[allow(unused_imports)] use std::sync::Arc;
-#[allow(unused_imports)] use std::sync::Mutex;
+use common::id::Id;
+use std::cell::Cell;
+use std::sync::{Arc, Mutex};
+use rand::Rng;
 
 
-static mut history: Option<Vec<Message>> = None;
+static mut history: Option<Arc<Mutex<Vec<Message>>>> = None;
 
-pub fn cursive_test(neth: NetHandle) {
+pub fn cursive_main(neth: Arc<Mutex<NetHandle>>) {
+    let neth_clone1 = neth.clone();
+    let neth_clone2 = neth.clone();
 
     unsafe {
-        history = Some(Vec::new());
+        // initialize the global variable
+        history = Some(Arc::new(Mutex::new(Vec::new())));
     }
 
     let mut cursive = Cursive::ncurses();
-
-    /*
-    let prefix = |msg| {
-        let ts = msg.timestamp;
-        let sn = msg.sender_name;
-        format!("[{} {}] {}", sn, ts, msg)
-    };
-    */
+    let sender = cursive.cb_sink().clone();
 
     cursive.set_fps(10);
-    //cursive.cb_sink().send();
+    let jh = thread::spawn(move || {
+        let mut done = false;
+        while !done {
+            let opt = neth_clone2.lock().unwrap().read().expect("nethandle is dead");
+
+            match opt {
+                Some(FromNetMsg::NewMsg(msg)) => {
+                    let mut hist = unsafe {
+                        history.as_ref().unwrap().lock().unwrap()
+                    };
+                    hist.push(msg);
+                }
+                _ => {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    continue;
+                },
+            }
+
+            sender.send(Box::new(move |s: &mut Cursive| {
+                let mut hist = unsafe {
+                    history.as_ref().unwrap().lock().unwrap()
+                };
+                let mut output = s.find_id::<TextView>("output").unwrap();
+                let newest = &hist[hist.len()-1];
+                output.append(format_message(newest).as_str());
+                output.append("\n");
+            }));
+        }
+    });
+
 
     let mut cur = cursive.current_theme().clone();
     cur.palette[Background] = Rgb(64,64,64);
@@ -68,12 +94,11 @@ pub fn cursive_test(neth: NetHandle) {
                             Panel::new(OnEventView::new(TextArea::new()
                                                      .content("")
                                                      .with_id("input"))
-                                          .on_pre_event(Key::Enter, |c| {
+                                          .on_pre_event(Key::Enter, move |c| {
                                               let mut input = c.find_id::<TextArea>("input").unwrap();
-                                              let mut output = c.find_id::<TextView>("output").unwrap();
-                                              unsafe {
-                                                  history.unwrap().push(neth.send_message(String::from(input.get_content())).unwrap());
-                                              }
+                                              let mut neth = neth_clone1.lock().unwrap();
+                                              neth.send_message(String::from(input.get_content())).unwrap();
+
                                               input.set_content("");
                                           }
                                       )))));
@@ -81,4 +106,8 @@ pub fn cursive_test(neth: NetHandle) {
     cursive.add_global_callback(event::Key::Esc, |c| c.quit());
 
     cursive.run();
+}
+
+fn format_message(msg: &Message) -> String {
+    "omg".to_string()
 }
