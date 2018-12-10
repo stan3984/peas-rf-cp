@@ -20,7 +20,11 @@ where T: Hash + Eq
     pub fn contains(&self, x: &T) -> bool {
         self.set.contains(x)
     }
-    pub fn insert(&mut self, x: T) {
+    pub fn insert(&mut self, x: T) -> bool {
+        if self.contains(&x) {
+            return false;
+        }
+
         if self.vec.len() >= self.maxsize {
             let temp = self.vec.pop_front().unwrap();
             self.set.remove(&temp);
@@ -28,5 +32,6 @@ where T: Hash + Eq
         let r = Rc::new(x);
         self.vec.push_back(r.clone());
         self.set.insert(r);
+        true
     }
 }

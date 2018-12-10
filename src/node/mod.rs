@@ -3,6 +3,7 @@ mod ktable;
 mod netthread;
 mod kademlia;
 mod cache;
+mod broadcast;
 
 use std::net::SocketAddr;
 use common::id::Id;
@@ -11,27 +12,6 @@ use network::tcp;
 
 const KAD_SERVICE: u32 = 1;
 const BROADCAST_SERVICE: u32 = 2;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TcpBroadcast {
-    hash: u64,
-    payload: TcpPayload,
-}
-
-impl TcpBroadcast {
-    pub fn new(pay: TcpPayload) -> Self {
-        TcpBroadcast{hash: tcp::get_hash(), payload: pay}
-    }
-    pub fn from_message(msg: Message) -> Self {
-        TcpBroadcast::new(TcpPayload::Msg(msg))
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TcpPayload {
-    IsAlive(Id),
-    Msg(Message),
-}
 
 #[derive(Debug, Clone)]
 pub enum FromNetMsg {

@@ -66,12 +66,17 @@ impl<'a> IdLookup<'a> {
             .map(|e| (e.get_addr(), e.get_id()))
             .collect();
 
-        let sendh = UM::send(
-            udpman,
-            &msg,
-            initial.keys().map(|k| *k).collect(),
-            super::KAD_SERVICE
-        );
+        let sendh = if initial.is_empty() {
+            debug!("no one connected for an id lookup");
+            None
+        } else {
+            Some(UM::send(
+                udpman,
+                &msg,
+                initial.keys().map(|k| *k).collect(),
+                super::KAD_SERVICE
+            ))
+        };
 
         IdLookup {
             udpman: udpman,
@@ -79,7 +84,7 @@ impl<'a> IdLookup<'a> {
             best: Ktable::new(K as u32, lookup_id),
             ktable: ktable,
             msg: msg,
-            cur: Some(sendh),
+            cur: sendh,
             map: initial,
         }
     }

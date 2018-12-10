@@ -12,6 +12,7 @@ use serde::ser::Serialize;
 use bincode::{deserialize, serialize};
 use rand::RngCore;
 use std::slice::Iter;
+use common::get_hash;
 
 const TICKET_TTL: Duration = Duration::from_millis(50);
 const SLEEP_TIME: Duration = Duration::from_millis(20);
@@ -352,8 +353,3 @@ fn send_msg(sock: &UdpSocket, id: u64, service: u32, payload: &Vec<u8>, dest: So
     udp::send(sock, &Msg{id: id, service: service, payload: payload.clone()}, dest).unwrap();
 }
 
-/// get random u64 hash
-pub fn get_hash() -> u64 {
-    let mut rng = rand::thread_rng();
-    rng.next_u64()
-}

@@ -14,9 +14,9 @@ use tracker::api;
 use common::timer::Timer;
 use node::ktable::{Entry,Ktable};
 use node::cache::Cache;
+use node::broadcast::BroadcastManager;
 
 // const RECV_TIMEOUT: Duration = Duration::from_millis(50);
-const MAX_CONNECTIONS: u32 = 3;
 const THREAD_SLEEP: Duration = Duration::from_millis(40);
 
 pub fn run(chan_in: Receiver<ToNetMsg>,
@@ -56,9 +56,9 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
             // TODO: periodically check the trackers if something just goofed
         }
 
-        let mut cache: Cache<u64> = Cache::new(100);
-        let mut connected: Vec<Entry> = Vec::new();
+        // ongoing id lookup
         let mut looking: Option<kademlia::IdLookup> = None;
+        let mut broadcastMan = BroadcastManager::new(ktab.clone(), broad_service, &udpman);
 
         let mut tracker_timer = Timer::new_expired();
         let mut lookup_timer = Timer::from_millis(1000*20);
@@ -116,7 +116,11 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
                 ));
             }
 
-            //handle one tcp? or maybe in own thread?
+            //handle broadcasts
+            let newmsgs = broadcastMan.update();
+            for m in newmsgs.into_iter() {
+                chan_out.send(FromNetMsg::from_message(m)).unwrap();
+            }
 
             //check if someone wants to say something
             // TODO: loop this to read more stuff?
@@ -126,10 +130,8 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
                     break 'main;
                 }
                 Ok(ToNetMsg::NewMsg(msg)) => {
-                    debug!("'{}' is broadcasting '{}'", msg.get_sender_name(), msg.get_message());
-                    let tosend = TcpBroadcast::from_message(msg);
-                    cache.insert(tosend.hash);
-                    // broadcast_except(&mut tcp_streams, None, &tosend);
+                    // debug!("'{}' is broadcasting '{}'", msg.get_sender_name(), msg.get_message());
+                    broadcastMan.broadcast(msg);
                 }
                 Err(TryRecvError::Empty) => (),
                 Err(TryRecvError::Disconnected) => {
@@ -146,55 +148,3 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
     info!("netthread terminated");
 }
 
-fn read_and_broadcast(streams: &mut Vec<TcpStream>, ktab: &mut Ktable, cache: &mut Cache<u64>, chan_out: &Sender<FromNetMsg>) {
-    let timer = Timer::from_millis(10);
-    for i in (0..streams.len()).rev() {
-        loop {
-            match tcp::recv_once::<TcpBroadcast>(&mut streams[i]) {
-                Ok(msg) => {
-                    if !cache.contains(&msg.hash) {
-                        cache.insert(msg.hash);
-                        let ban = streams[i].peer_addr().unwrap();
-                        broadcast_except(streams, Some(ban), &msg);
-                        if let TcpPayload::Msg(m) = msg.payload {
-                            debug!("received '{}' from '{}'", m.get_message(), m.get_sender_name());
-                            chan_out.send(FromNetMsg::from_message(m)).unwrap();
-                        }
-                    }
-                },
-                Err(NetworkError::Timeout) => break,
-                Err(NetworkError::NoMessage) => (),
-                Err(ioerror) => warn!("on tcp::recv_once {}", ioerror),
-            }
-        }
-    }
-}
-
-/// send
-fn broadcast_except(streams: &mut Vec<TcpStream>, banned: Option<SocketAddr>, msg: &TcpBroadcast) {
-    for s in streams {
-        if banned.map_or(true, |b| b != s.peer_addr().unwrap()) {
-            tcp::send(s, msg).map_err(|e| warn!("on tcp::send {}", e)).unwrap_or(0);
-        }
-    }
-}
-
-/// try to connect to peers if we are connected to too few
-fn connect_closest(streams: &mut Vec<Entry>, ktab: &mut Ktable) {
-    if streams.len() < MAX_CONNECTIONS as usize {
-        let closest = ktab.get(MAX_CONNECTIONS);
-        for c in closest {
-            if !already_connected(streams, c) {
-                streams.push(c);
-            }
-        }
-    }
-    fn already_connected(streams: &Vec<Entry>, e: Entry) -> bool {
-        for s in streams {
-            if s.get_id() == e.get_id() {
-                return true
-            }
-        }
-        false
-    }
-}
