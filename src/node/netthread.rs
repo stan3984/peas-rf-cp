@@ -5,10 +5,9 @@ use std::time::{Instant, Duration};
 use std::thread;
 
 use super::*;
-use network::{tcp, udp};
 use network::NetworkError;
 use network::udpmanager as UM;
-use std::net::TcpStream;
+use network::udp;
 use common::id::Id;
 use tracker::api;
 use common::timer::Timer;
