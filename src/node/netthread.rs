@@ -1,7 +1,5 @@
-use std::mem;
 use std::sync::mpsc::{Receiver, TryRecvError, Sender};
-use std::sync::{Arc, Mutex};
-use std::time::{Instant, Duration};
+use std::time::Duration;
 use std::thread;
 
 use super::*;
@@ -11,8 +9,6 @@ use network::udp;
 use common::id::Id;
 use tracker::api;
 use common::timer::Timer;
-use node::ktable::{Entry,Ktable};
-use node::cache::Cache;
 use node::broadcast::BroadcastManager;
 
 // const RECV_TIMEOUT: Duration = Duration::from_millis(50);
@@ -57,7 +53,7 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
 
         // ongoing id lookup
         let mut looking: Option<kademlia::IdLookup> = None;
-        let mut broadcastMan = BroadcastManager::new(ktab.clone(), broad_service, &udpman);
+        let mut broadcast_man = BroadcastManager::new(ktab.clone(), broad_service, &udpman);
 
         let mut tracker_timer = Timer::new_expired();
         let mut lookup_timer = Timer::from_millis(1000*20);
@@ -116,7 +112,7 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
             }
 
             //handle broadcasts
-            let newmsgs = broadcastMan.update();
+            let newmsgs = broadcast_man.update();
             for m in newmsgs.into_iter() {
                 chan_out.send(FromNetMsg::from_message(m)).unwrap();
             }
@@ -130,7 +126,7 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
                 }
                 Ok(ToNetMsg::NewMsg(msg)) => {
                     // debug!("'{}' is broadcasting '{}'", msg.get_sender_name(), msg.get_message());
-                    broadcastMan.broadcast(msg);
+                    broadcast_man.broadcast(msg);
                 }
                 Err(TryRecvError::Empty) => (),
                 Err(TryRecvError::Disconnected) => {

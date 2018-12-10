@@ -10,7 +10,6 @@ use std::time::Duration;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 use bincode::{deserialize, serialize};
-use rand::RngCore;
 use std::slice::Iter;
 use common::get_hash;
 

@@ -14,7 +14,7 @@ use peas_rf_cp::node::nethandle::NetHandle;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::mem;
-use std::net::{ToSocketAddrs,SocketAddr};
+use std::net::ToSocketAddrs;
 
 const ARG_USERNAME: &str = "username";
 const ARG_LOG_LEVEL: &str = "log-level";

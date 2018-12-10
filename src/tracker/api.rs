@@ -5,7 +5,6 @@ use super::*;
 use common::id::Id;
 use network::udp::*;
 use network::Result;
-use network::NetworkError;
 
 pub struct LookupSession<'a> {
     sock: &'a UdpSocket,

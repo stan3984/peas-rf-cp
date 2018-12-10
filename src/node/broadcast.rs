@@ -10,6 +10,7 @@ use std::sync::{Mutex, Arc};
 
 const MAX_CONNECTIONS: u32 = 3;
 
+/// handles everything that has to do with the broadcast network
 pub struct BroadcastManager<'a> {
     connected: Vec<Entry>,
     cache: Cache<u64>,
@@ -158,6 +159,7 @@ impl<'a> BroadcastManager<'a> {
         self.active.push((msg, sh));
     }
 
+    /// broadcasts a new message to everyone else
     pub fn broadcast(&mut self, msg: Message) {
         self.broadcast_a_msg(Msg::from_message(msg), None);
     }

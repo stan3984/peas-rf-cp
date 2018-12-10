@@ -1,6 +1,5 @@
 use pnet::datalink::interfaces;
-use rand::Rng;
-use std::io::{self, Read};
+use std::io;
 use std::net::{IpAddr, IpAddr::V4, Ipv4Addr, SocketAddr};
 use std::{error::Error, fmt};
 

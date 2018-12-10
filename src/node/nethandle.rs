@@ -1,4 +1,3 @@
-use std::mem;
 use std::net::SocketAddr;
 use std::sync::mpsc::{TryRecvError, Receiver, Sender, channel};
 use std::thread::{self, JoinHandle};

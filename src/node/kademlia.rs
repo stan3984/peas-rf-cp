@@ -1,15 +1,11 @@
 
 use std::net::{UdpSocket, SocketAddr};
 use ::network::{Result,NetworkError};
-use ::network::udp;
 use tracker::api;
 use ::common::id::Id;
-use std::time::Duration;
 use ::node::ktable::{Entry,Ktable};
 use std::sync::{Arc,Mutex};
-use std::thread;
 use std::collections::{HashMap,HashSet};
-use std::sync::mpsc;
 use network::udpmanager as UM;
 
 const LOOKUP_SIZE: usize = 5;
