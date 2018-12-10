@@ -15,7 +15,7 @@ pub enum FromNetMsg {
 pub enum ToNetMsg {
     /// Request termination of the network thread.
     Terminate,
-    NewMsg(Message)
+    NewMsg(String)
 }
 
 #[derive(Debug, Clone)]

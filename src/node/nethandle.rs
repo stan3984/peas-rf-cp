@@ -35,6 +35,15 @@ impl NetHandle {
 
         let netusername = user_name.clone();
         let jhandle = thread::spawn(move || {
+            let asd = chan_in_recv;
+            let asd2 = chan_out_send;
+
+            loop {
+                if let ToNetMsg::NewMsg(s) = asd.recv().unwrap() {
+                    let m = Message::new(s, Id::from_u64(1), "kalle".to_string(), true);
+                    asd2.send(FromNetMsg::NewMsg(m)).unwrap();
+                }
+            }
         });
 
         NetHandle {
@@ -120,14 +129,13 @@ impl NetHandle {
             Err(TryRecvError::Empty) => Ok(None),
             Err(TryRecvError::Disconnected) => Err(SendError::Disconnected),
         }
-    }
+}
 
     /// sends `msg` to all other connected nodes.
     /// returns the message struct that was sent
-    pub fn send_message(&mut self, msg: String) -> Result<Message, SendError> {
-        let m = Message::new(msg, self.my_id, self.my_name.clone(), true);
-        self.send_to_net(ToNetMsg::NewMsg(m.clone()))?;
-        Ok(m)
+    pub fn send_message(&mut self, msg: String) -> Result<(), SendError> {
+        self.send_to_net(ToNetMsg::NewMsg(msg))?;
+        Ok(())
     }
 
     fn send_to_net(&mut self, msg: ToNetMsg) -> Result<(), SendError> {
