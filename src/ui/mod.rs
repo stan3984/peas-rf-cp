@@ -3,37 +3,23 @@ use node::nethandle::NetHandle;
 use node::Message;
 use node::FromNetMsg;
 
-use pancurses::*;
 use cursive::*;
 use cursive::align::VAlign::Bottom;
 use cursive::theme::PaletteColor::*;
 use cursive::theme::Color::*;
-use cursive::theme::BaseColor::*;
 use cursive::theme::BorderStyle;
-use cursive::theme::Theme;
-use cursive::theme::ColorStyle;
 use cursive::traits::*;
-use cursive::event::{Event, Key};
-use cursive::vec::Vec2;
-use cursive::{Cursive, Printer};
-use std::collections::VecDeque;
-use std::sync::mpsc;
+use cursive::event::Key;
+use cursive::Cursive;
 use std::thread;
-use std::time::Duration;
-use std::time::SystemTime;
 use chrono::offset::Utc;
 use chrono::DateTime;
-use std::net::SocketAddr;
 use cursive::view::*;
 use cursive::views::*;
 use common::id::Id;
-use std::cell::Cell;
 use std::sync::{Arc, Mutex};
-use rand::Rng;
 
-
-
-static mut history: Option<Arc<Mutex<Vec<Message>>>> = None;
+static mut HISTORY: Option<Arc<Mutex<Vec<Message>>>> = None;
 
 pub fn cursive_main(neth: Arc<Mutex<NetHandle>>) {
     let neth_clone1 = neth.clone();
@@ -41,22 +27,21 @@ pub fn cursive_main(neth: Arc<Mutex<NetHandle>>) {
 
     unsafe {
         // initialize the global variable
-        history = Some(Arc::new(Mutex::new(Vec::new())));
+        HISTORY = Some(Arc::new(Mutex::new(Vec::new())));
     }
 
     let mut cursive = Cursive::ncurses();
     let sender = cursive.cb_sink().clone();
 
     cursive.set_fps(10);
-    let jh = thread::spawn(move || {
-        let mut done = false;
-        while !done {
+    let _jh = thread::spawn(move || {
+        loop {
             let opt = neth_clone2.lock().unwrap().read().expect("nethandle is dead");
 
             match opt {
                 Some(FromNetMsg::NewMsg(msg)) => {
                     let mut hist = unsafe {
-                        history.as_ref().unwrap().lock().unwrap()
+                        HISTORY.as_ref().unwrap().lock().unwrap()
                     };
                     hist.push(msg);
                 }
@@ -67,14 +52,14 @@ pub fn cursive_main(neth: Arc<Mutex<NetHandle>>) {
             }
 
             sender.send(Box::new(move |s: &mut Cursive| {
-                let mut hist = unsafe {
-                    history.as_ref().unwrap().lock().unwrap()
+                let hist = unsafe {
+                    HISTORY.as_ref().unwrap().lock().unwrap()
                 };
                 let mut output = s.find_id::<TextView>("output").unwrap();
                 let newest = &hist[hist.len()-1];
                 output.append(format_message(newest).as_str());
                 output.append("\n");
-            }));
+            })).unwrap();
         }
     });
 
@@ -103,7 +88,7 @@ pub fn cursive_main(neth: Arc<Mutex<NetHandle>>) {
                                               let text = input.get_content().to_string();
 
                                               // send message to others
-                                              let mut neth = neth_clone1.lock().unwrap();
+                                              let neth = neth_clone1.lock().unwrap();
                                               neth.send_message(text.clone()).unwrap();
 
                                               // show the message to ourselves
