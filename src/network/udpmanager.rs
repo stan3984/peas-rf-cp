@@ -257,6 +257,10 @@ where T: DeserializeOwned
         assert!(self.all.len() == 1, "this SendHandle had more than one destination");
         self.responses.remove(&self.all[0])
     }
+    pub fn borrow_single_answer(&self) -> Option<&T> {
+        assert!(self.all.len() == 1, "this SendHandle had more than one destination");
+        self.responses.get(&self.all[0])
+    }
 }
 
 /// the main function of the manager thread

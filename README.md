@@ -8,14 +8,21 @@ This is a distributed chat system made in [Rust](https://www.rust-lang.org/)!
 cargo build
 ```
 
-## how to run a client
-
+# how to use
+## first create a room with
 ```sh
-cargo run --bin client
+peas --create-room ROOMNAME
+```
+which creates a file *ROOMNAME.peas-room*
+
+## maybe start a tracker
+to start a new one
+```sh
+tracker
 ```
 
-## how to run a tracker
-
+## connect
+lastly conenct via the tracker
 ```sh
-RUST_LOG=debug cargo run --bin tracker -- port
+peas --username USER --room ROOMNAME.peas-room --tracker xxx.xxx.xxx.xxx.ppp
 ```
