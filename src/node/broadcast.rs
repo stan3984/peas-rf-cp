@@ -9,12 +9,13 @@ use super::{Message,FromNetMsg};
 use std::sync::{Mutex, Arc};
 use std::sync::mpsc::Sender;
 use common::timer::Timer;
+use std::collections::HashMap;
 
 const MAX_CONNECTIONS: u32 = 3;
 
 /// handles everything that has to do with the broadcast network
 pub struct BroadcastManager<'a> {
-    connected: Vec<Entry>,
+    connected: HashMap<SocketAddr, Id>,
     cache: Cache<u64>,
     active: Vec<(Msg, UM::SendHandle<()>)>,
     ktable: Arc<Mutex<Ktable>>,
@@ -43,6 +44,7 @@ enum MsgPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Msg {
     hash: u64,
+    sender_id: Id, // not the source, but the link that we received from
     payload: MsgPayload,
 }
 
@@ -55,7 +57,7 @@ impl<'a> BroadcastManager<'a> {
         my_id: Id
     ) -> Self {
         BroadcastManager{
-            connected: Vec::new(),
+            connected: HashMap::new(),
             cache: Cache::new(100),
             active: Vec::new(),
             ktable: ktable,
@@ -115,8 +117,9 @@ impl<'a> BroadcastManager<'a> {
                 count -= 1;
             }
 
-            if let Some((Msg{hash, payload}, sender, id)) = UM::service_get(&self.service) {
+            if let Some((Msg{hash, payload, sender_id}, sender, id)) = UM::service_get(&self.service) {
                 UM::service_respond(&self.service, &(), id, sender).unwrap();
+
                 if self.cache.insert(hash) {
                     let broadcast =
                         match payload {
@@ -139,23 +142,25 @@ impl<'a> BroadcastManager<'a> {
                             }
                             MsgPayload::Ting => {
                                 debug!("responding to a ting");
-                                let my_id = self.my_id;
-                                self.broadcast_a_msg(
-                                    Msg{
-                                        hash: get_hash(),
-                                        payload: MsgPayload::IsAlive(my_id)
-                                    },
-                                    None
-                                );
+                                let m = self.new_msg(MsgPayload::IsAlive(self.my_id));
+                                self.broadcast_a_msg(m, None);
                                 false
                             }
                         };
 
                     if broadcast {
+                        // are we also connected to this fellow broadcaster?
+                        if !self.connected.contains_key(&sender) {
+                            self.connected.insert(sender, sender_id);
+                            self.ktable.lock().unwrap().offer(Entry::new(sender, sender_id));
+                        }
+
+                        let my_id = self.my_id;
                         self.broadcast_a_msg(
                             Msg{
                                 hash: hash,
-                                payload: payload
+                                payload: payload,
+                                sender_id: my_id
                             },
                             Some(sender)
                         );
@@ -166,13 +171,10 @@ impl<'a> BroadcastManager<'a> {
     }
 
     fn remove_connection(&mut self, adr: &SocketAddr) {
-        for i in (0..self.connected.len()).rev() {
-            if self.connected[i].get_addr() == *adr {
-                debug!("removed {} from connected", self.connected[i].get_addr());
-                self.ktable.lock().unwrap().delete_id(self.connected[i].get_id());
-                self.connected.remove(i);
-                break;
-            }
+        if self.connected.contains_key(&adr) {
+            let id = self.connected.remove(&adr).unwrap();
+            debug!("removed {} from connected", adr);
+            self.ktable.lock().unwrap().delete_id(id);
         }
     }
 
@@ -182,21 +184,12 @@ impl<'a> BroadcastManager<'a> {
         if self.connected.len() < MAX_CONNECTIONS as usize {
             let closest = ktab.get(MAX_CONNECTIONS);
             for c in closest {
-                if !self.already_connected(c) {
+                if !self.connected.contains_key(&c.get_addr()) {
                     debug!("connected to {}", c.get_addr());
-                    self.connected.push(c);
+                    self.connected.insert(c.get_addr(), c.get_id());
                 }
             }
         }
-    }
-
-    fn already_connected(&self, e: Entry) -> bool {
-        for s in self.connected.iter() {
-            if s.get_id() == e.get_id() {
-                return true
-            }
-        }
-        false
     }
 
     /// broadcast `msg` to all other nodes
@@ -210,8 +203,8 @@ impl<'a> BroadcastManager<'a> {
         self.cache.insert(msg.hash);
 
         let targets: Vec<SocketAddr> =
-            self.connected.iter()
-                .map(|e| e.get_addr())
+            self.connected.keys()
+                .map(|e| *e)
                 .filter(|a| ban.map_or(true, |b| b != *a))
                 .collect();
 
@@ -232,7 +225,8 @@ impl<'a> BroadcastManager<'a> {
 
     /// broadcasts a new message to everyone else
     pub fn broadcast(&mut self, msg: Message) {
-        self.broadcast_a_msg(Msg::from_message(msg), None);
+        let m = self.from_message(msg);
+        self.broadcast_a_msg(m, None);
     }
 
     fn update_ting(&mut self) {
@@ -243,7 +237,7 @@ impl<'a> BroadcastManager<'a> {
 
             if let Some(ran) = mran {
                 self.ting_timer.disable();
-                let m = Msg{hash: get_hash(), payload: MsgPayload::Ting};
+                let m = Msg{hash: get_hash(), payload: MsgPayload::Ting, sender_id: self.my_id};
                 let sh = UM::send(
                     &self.udpman,
                     &m,
@@ -281,9 +275,9 @@ impl<'a> BroadcastManager<'a> {
                 }
             } else if self.ting_cur.as_ref().unwrap().timer.expired(1.0) {
                 let i = self.ting_cur.as_ref().unwrap().dst;
-                if !self.already_connected(i) {
+                if !self.connected.contains_key(&i.get_addr()) {
                     debug!("creating an extra bridge to {} because a ting timed out", i.get_addr());
-                    self.connected.push(i);
+                    self.connected.insert(i.get_addr(), i.get_id());
                 }
                 self.ting_timer.reset();
                 self.ting_cur = None;
@@ -291,13 +285,11 @@ impl<'a> BroadcastManager<'a> {
         }
 
     }
+    fn new_msg(&self, pay: MsgPayload) -> Msg {
+        Msg{hash: get_hash(), payload: pay, sender_id: self.my_id}
+    }
+    fn from_message(&self, msg: Message) -> Msg {
+        self.new_msg(MsgPayload::Msg(msg))
+    }
 }
 
-impl Msg {
-    pub fn new(pay: MsgPayload) -> Self {
-        Msg{hash: get_hash(), payload: pay}
-    }
-    pub fn from_message(msg: Message) -> Self {
-        Msg::new(MsgPayload::Msg(msg))
-    }
-}
