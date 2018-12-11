@@ -10,11 +10,14 @@ extern crate peas_rf_cp;
 use peas_rf_cp::common::id::Id;
 use peas_rf_cp::common::logger;
 use peas_rf_cp::node::nethandle::NetHandle;
+use peas_rf_cp::ui;
 
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::mem;
 use std::net::ToSocketAddrs;
+
+use std::sync::{Arc, Mutex};
 
 const ARG_USERNAME: &str = "username";
 const ARG_LOG_LEVEL: &str = "log-level";
@@ -37,9 +40,10 @@ fn main() {
     } else if matches.is_present(ARG_JOIN_ROOM) {
         match parse_room(&matches) {
             Ok(room_id) => {
-                run(matches.value_of(ARG_USERNAME).unwrap().to_string(),
-                    room_id,
-                    matches.value_of(ARG_TRACKER).unwrap().to_string());
+                let user = matches.value_of(ARG_USERNAME).unwrap().to_string();
+                let trck = matches.value_of(ARG_TRACKER).unwrap().to_string();
+
+                run(user, room_id, trck);
             },
             Err(x) => log::error!("Failed to parse room ({})", x),
         }
@@ -49,24 +53,14 @@ fn main() {
 }
 
 fn run(username: String, room_id: Id, tracker: String) {
-    let neth = NetHandle::new(
+    let neth = Arc::new(Mutex::new(NetHandle::new(
         Id::from_u64(0),
         username,
         room_id,
-        tracker.to_socket_addrs().unwrap().collect());
-    let mut asdasd = 1;
-    loop {
-        neth.send_message(asdasd.to_string()).unwrap();
-        asdasd += 1;
-        loop {
-            match neth.read() {
-                Ok(Some(_)) => (),
-                Ok(None) => break,
-                Err(_) => panic!(),
-            }
-        }
-        std::thread::sleep(std::time::Duration::from_millis(5000));
-    }
+        tracker.to_socket_addrs().unwrap().collect()
+    )));
+
+    ui::cursive_main(neth);
 }
 
 fn setup_logging<'a>(matches: &ArgMatches<'a>) {
