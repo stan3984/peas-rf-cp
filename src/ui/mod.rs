@@ -100,8 +100,17 @@ pub fn cursive_main(neth: Arc<Mutex<NetHandle>>) {
                                                      .with_id("input"))
                                           .on_pre_event(Key::Enter, move |c| {
                                               let mut input = c.find_id::<TextArea>("input").unwrap();
+                                              let text = input.get_content().to_string();
+
+                                              // send message to others
                                               let mut neth = neth_clone1.lock().unwrap();
-                                              neth.send_message(String::from(input.get_content())).unwrap();
+                                              neth.send_message(text.clone()).unwrap();
+
+                                              // show the message to ourselves
+                                              let mut output = c.find_id::<TextView>("output").unwrap();
+                                              let mut append = format_message(&Message::new(text, Id::from_u64(0), String::from("<you>"), true));
+                                              append.push('\n');
+                                              output.append(append);
 
                                               input.set_content("");
                                           }
