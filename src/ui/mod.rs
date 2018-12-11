@@ -11,6 +11,7 @@ use cursive::theme::Color::*;
 use cursive::theme::BaseColor::*;
 use cursive::theme::BorderStyle;
 use cursive::theme::Theme;
+use cursive::theme::ColorStyle;
 use cursive::traits::*;
 use cursive::event::{Event, Key};
 use cursive::vec::Vec2;
@@ -29,6 +30,7 @@ use common::id::Id;
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
 use rand::Rng;
+
 
 
 static mut history: Option<Arc<Mutex<Vec<Message>>>> = None;
@@ -114,6 +116,6 @@ fn format_message(msg: &Message) -> String {
     let s_name = msg.get_sender_name();
     let t_stamp = msg.get_timestamp();
     let datetime: DateTime<Utc> = t_stamp.into();
-    format!("[{}] {}: {}", datetime.format("%T"), s_name, msg.get_message())
+    format!("[{}]-[{}]: {}", datetime.format("%T"), s_name, msg.get_message())
 
 }
