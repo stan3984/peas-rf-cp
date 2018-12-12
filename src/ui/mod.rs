@@ -16,7 +16,6 @@ use chrono::offset::Utc;
 use chrono::DateTime;
 use cursive::view::*;
 use cursive::views::*;
-use common::id::Id;
 use std::sync::{Arc, Mutex};
 
 static mut HISTORY: Option<Arc<Mutex<Vec<Message>>>> = None;
@@ -91,7 +90,7 @@ pub fn cursive_main(neth: Arc<Mutex<NetHandle>>) {
                                                      .with_id("input"))
                                           .on_pre_event(Key::Enter, move |c| {
                                               let mut input = c.find_id::<TextArea>("input").unwrap();
-                                              let mut neth = neth_clone1.lock().unwrap();
+                                              let neth = neth_clone1.lock().unwrap();
                                               neth.send_message(String::from(input.get_content())).unwrap();
 
                                               input.set_content("");
