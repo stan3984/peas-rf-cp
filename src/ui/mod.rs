@@ -42,14 +42,10 @@ pub fn cursive_main(neth: Arc<Mutex<NetHandle>>) {
                     let mut hist = unsafe {
                         HISTORY.as_ref().unwrap().lock().unwrap()
                     };
-                    hist.push(msg);
+                    hist.push(msg.clone());
                     sender.send(Box::new(move |s: &mut Cursive| {
-                        let hist = unsafe {
-                            HISTORY.as_ref().unwrap().lock().unwrap()
-                        };
                         let mut output = s.find_id::<TextView>("output").unwrap();
-                        let newest = &hist[hist.len()-1];
-                        output.append(format_message(newest).as_str());
+                        output.append(format_message(&msg).as_str());
                         output.append("\n");
                     })).unwrap();
                 }
