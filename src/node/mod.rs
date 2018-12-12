@@ -43,7 +43,7 @@ pub struct Message {
 }
 
 impl Message {
-    pub fn new(msg: String, sender_id: Id, sender_name: String, is_myself: bool) -> Self {
+    fn new(msg: String, sender_id: Id, sender_name: String, is_myself: bool) -> Self {
         Message {
             msg: msg,
             sender_id: sender_id,
