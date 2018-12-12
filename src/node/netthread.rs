@@ -54,7 +54,7 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
 
         // ongoing id lookup
         let mut looking: Option<kademlia::IdLookup> = None;
-        let mut broadcast_man = BroadcastManager::new(ktab.clone(), broad_service, &udpman, chan_out, my_id);
+        let mut broadcast_man = BroadcastManager::new(ktab.clone(), broad_service, &udpman, chan_out.clone(), my_id);
 
         let mut tracker_timer = Timer::new_expired();
         let mut lookup_timer = Timer::from_millis(1000*20);
@@ -125,6 +125,7 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
                 Ok(ToNetMsg::NewMsg(msg)) => {
                     // debug!("'{}' is broadcasting '{}'", msg.get_sender_name(), msg.get_message());
                     let m = Message::new(msg, user_id, user_name.clone(), true);
+                    chan_out.send(FromNetMsg::NewMsg(m.clone())).unwrap();
                     broadcast_man.broadcast(m);
                 }
                 Err(TryRecvError::Empty) => (),
