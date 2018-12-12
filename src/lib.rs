@@ -5,7 +5,6 @@
 extern crate log;
 extern crate rand;
 extern crate flexi_logger;
-extern crate pancurses;
 extern crate cursive;
 extern crate chrono;
 
