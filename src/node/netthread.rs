@@ -122,6 +122,10 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
                     info!("netthread is terminating as per request...");
                     break 'main;
                 }
+                Ok(ToNetMsg::NewMsg(ref msg)) if msg.len() > 100 => {
+                    warn!("message longer than 100 characters, didn't send it");
+                    chan_out.send(FromNetMsg::NotSent).unwrap();
+                }
                 Ok(ToNetMsg::NewMsg(msg)) => {
                     // debug!("'{}' is broadcasting '{}'", msg.get_sender_name(), msg.get_message());
                     let m = Message::new(msg, user_id, user_name.clone(), true);

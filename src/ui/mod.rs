@@ -80,9 +80,11 @@ pub fn cursive_main(neth: Arc<Mutex<NetHandle>>) {
     cursive.add_layer(LinearLayout::vertical()
         .child(BoxView::new(SizeConstraint::Full,
                             SizeConstraint::Full,
-                            Panel::new(TextView::new("")
-                                .v_align(Bottom)
-                                .with_id("output"))))
+                            Panel::new(ScrollView::new(
+                                TextView::new("")
+                                    .v_align(Bottom)
+                                    .with_id("output"))
+                                .scroll_strategy(ScrollStrategy::StickToBottom))))
         .child(BoxView::new(SizeConstraint::Full,
                             SizeConstraint::Fixed(5),
                             Panel::new(OnEventView::new(TextArea::new()
