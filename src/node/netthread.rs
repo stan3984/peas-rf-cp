@@ -11,8 +11,7 @@ use tracker::api;
 use common::timer::Timer;
 use node::broadcast::BroadcastManager;
 
-// const RECV_TIMEOUT: Duration = Duration::from_millis(50);
-const THREAD_SLEEP: Duration = Duration::from_millis(40);
+const THREAD_SLEEP: Duration = Duration::from_millis(30);
 
 pub fn run(chan_in: Receiver<ToNetMsg>,
            chan_out: Sender<FromNetMsg>,

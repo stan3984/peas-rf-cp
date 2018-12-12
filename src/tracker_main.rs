@@ -6,5 +6,5 @@ use log::LevelFilter;
 
 fn main() {
     peas_rf_cp::common::logger::initialize_logger(LevelFilter::Debug, false);
-    server::start(12345, 60);
+    server::start(12345, 600);
 }
