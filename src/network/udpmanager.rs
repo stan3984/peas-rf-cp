@@ -336,7 +336,7 @@ fn manager_main(recv: Receiver<Request>, sock: UdpSocket) {
                     tickets.remove(i);
                 } else {
                     if tickets[i].timer.get_timeout() == Duration::from_millis(0) {
-                        debug!("sending a ticket");
+                        // debug!("sending a ticket");
                     } else {
                         debug!("resending a ticket");
                     }
