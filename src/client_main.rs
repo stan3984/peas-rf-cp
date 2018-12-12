@@ -9,7 +9,7 @@ use log::LevelFilter;
 extern crate peas_rf_cp;
 use peas_rf_cp::common::id::Id;
 use peas_rf_cp::common::logger;
-use peas_rf_cp::node::nethandle::NetHandle;
+use peas_rf_cp::node::{bot, nethandle::NetHandle};
 use peas_rf_cp::ui;
 
 use std::fs::File;
@@ -25,6 +25,7 @@ const ARG_LOG_STDERR: &str = "log-stderr";
 const ARG_NEW_ROOM: &str = "new-room";
 const ARG_JOIN_ROOM: &str = "join-room";
 const ARG_TRACKER: &str = "tracker";
+const ARG_BOT: &str = "bot";
 
 fn main() {
     let app = create_app();
@@ -42,8 +43,9 @@ fn main() {
             Ok(room_id) => {
                 let user = matches.value_of(ARG_USERNAME).unwrap().to_string();
                 let trck = matches.value_of(ARG_TRACKER).unwrap().to_string();
+                let bot = matches.is_present(ARG_BOT);
 
-                run(user, room_id, trck);
+                run(user, room_id, trck, bot);
             },
             Err(x) => log::error!("Failed to parse room ({})", x),
         }
@@ -52,15 +54,20 @@ fn main() {
     log::info!("Shutting down");
 }
 
-fn run(username: String, room_id: Id, tracker: String) {
-    let neth = Arc::new(Mutex::new(NetHandle::new(
+fn run(username: String, room_id: Id, tracker: String, bot: bool) {
+    let nethandle = NetHandle::new(
         Id::from_u64(0),
         username,
         room_id,
         tracker.to_socket_addrs().unwrap().collect()
-    )));
+    );
 
-    ui::cursive_main(neth);
+    if !bot {
+        let wrap = Arc::new(Mutex::new(nethandle));
+        ui::cursive_main(wrap);
+    } else {
+        bot::bot_main(nethandle);
+    }
 }
 
 fn setup_logging<'a>(matches: &ArgMatches<'a>) {
@@ -166,6 +173,12 @@ fn create_app<'a, 'b>() -> App<'a, 'b> {
                 .help("Specifies the tracker to connect to")
                 .takes_value(true)
                 .requires_all(&[ARG_JOIN_ROOM, ARG_USERNAME]),
+        ).arg(
+            Arg::with_name(ARG_BOT)
+                .long("bot")
+                .help("Runs the client as a bot (does not take user input and discards user output)")
+                .requires_all(&[ARG_JOIN_ROOM, ARG_USERNAME, ARG_TRACKER])
+                .conflicts_with_all(&[ARG_NEW_ROOM]),
         );
 
     return a;
