@@ -37,7 +37,7 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
 
     {
         // find a bootstrapper
-        let boot_node = kademlia::find_bootstrapper(&udpman, &track_sock, room_id, &trackers).unwrap();
+        let boot_node = kademlia::find_bootstrapper(&udpman, &track_sock, room_id, &trackers).expect("no tracker responded");
         if let Some((adr, id)) = boot_node {
             info!("found {:?} to bootstrap to", adr);
             ktab.lock().unwrap().offer(ktable::Entry::new(adr, id));
@@ -77,7 +77,7 @@ pub fn run(chan_in: Receiver<ToNetMsg>,
                         tracker_timer.reset_with(ttl);
                     },
                     Err(NetworkError::Timeout) => {
-                        let again = 10;
+                        let again = 60;
                         warn!("tracker on update is not responding, trying again in {}s", again);
                         tracker_timer.reset_with(Duration::from_secs(again));
                     },
