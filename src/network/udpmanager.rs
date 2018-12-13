@@ -13,8 +13,8 @@ use bincode::{deserialize, serialize};
 use std::slice::Iter;
 use common::get_hash;
 
-const TICKET_TTL: Duration = Duration::from_millis(50);
-const SLEEP_TIME: Duration = Duration::from_millis(20);
+const TICKET_TTL: Duration = Duration::from_millis(150);
+const SLEEP_TIME: Duration = Duration::from_millis(30);
 const RETRIES: u32 = 3;
 
 /// manager that can handle multiple active sessions over
@@ -306,7 +306,7 @@ fn manager_main(recv: Receiver<Request>, sock: UdpSocket) {
                             payload: msg.payload,
                             source: sender,
                             id: msg.id
-                        }).unwrap();
+                        }).expect("send to service failed");
                         break;
                     }
                 }
@@ -316,7 +316,7 @@ fn manager_main(recv: Receiver<Request>, sock: UdpSocket) {
                         tickets[i].requester.send(TicketResponse{
                             payload: Some(msg.payload),
                             source: sender
-                        }).unwrap();
+                        }).expect("send as response to ticket failed");
                         tickets.remove(i);
                         break;
                     }
@@ -332,11 +332,11 @@ fn manager_main(recv: Receiver<Request>, sock: UdpSocket) {
                     tickets[i].requester.send(TicketResponse{
                         payload: None,
                         source: tickets[i].dest
-                    }).unwrap();
+                    }).expect("expired ticket pipe");
                     tickets.remove(i);
                 } else {
                     if tickets[i].timer.get_timeout() == Duration::from_millis(0) {
-                        debug!("sending a ticket");
+                        // debug!("sending a ticket");
                     } else {
                         debug!("resending a ticket");
                     }
@@ -353,6 +353,6 @@ fn manager_main(recv: Receiver<Request>, sock: UdpSocket) {
 }
 
 fn send_msg(sock: &UdpSocket, id: u64, service: u32, payload: &Vec<u8>, dest: SocketAddr) {
-    udp::send(sock, &Msg{id: id, service: service, payload: payload.clone()}, dest).unwrap();
+    udp::send(sock, &Msg{id: id, service: service, payload: payload.clone()}, dest).expect("udp::send error in udpmanager");
 }
 

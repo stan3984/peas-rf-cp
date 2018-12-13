@@ -9,12 +9,15 @@ use log::LevelFilter;
 extern crate peas_rf_cp;
 use peas_rf_cp::common::id::Id;
 use peas_rf_cp::common::logger;
-use peas_rf_cp::node::nethandle::NetHandle;
+use peas_rf_cp::node::{bot, nethandle::NetHandle};
+use peas_rf_cp::ui;
 
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::mem;
 use std::net::ToSocketAddrs;
+
+use std::sync::{Arc, Mutex};
 
 const ARG_USERNAME: &str = "username";
 const ARG_LOG_LEVEL: &str = "log-level";
@@ -22,6 +25,7 @@ const ARG_LOG_STDERR: &str = "log-stderr";
 const ARG_NEW_ROOM: &str = "new-room";
 const ARG_JOIN_ROOM: &str = "join-room";
 const ARG_TRACKER: &str = "tracker";
+const ARG_BOT: &str = "bot";
 
 fn main() {
     let app = create_app();
@@ -37,9 +41,11 @@ fn main() {
     } else if matches.is_present(ARG_JOIN_ROOM) {
         match parse_room(&matches) {
             Ok(room_id) => {
-                run(matches.value_of(ARG_USERNAME).unwrap().to_string(),
-                    room_id,
-                    matches.value_of(ARG_TRACKER).unwrap().to_string());
+                let user = matches.value_of(ARG_USERNAME).unwrap().to_string();
+                let trck = matches.value_of(ARG_TRACKER).unwrap().to_string();
+                let bot = matches.is_present(ARG_BOT);
+
+                run(user, room_id, trck, bot);
             },
             Err(x) => log::error!("Failed to parse room ({})", x),
         }
@@ -48,24 +54,19 @@ fn main() {
     log::info!("Shutting down");
 }
 
-fn run(username: String, room_id: Id, tracker: String) {
-    let neth = NetHandle::new(
+fn run(username: String, room_id: Id, tracker: String, bot: bool) {
+    let nethandle = NetHandle::new(
         Id::from_u64(0),
         username,
         room_id,
-        tracker.to_socket_addrs().unwrap().collect());
-    let mut asdasd = 1;
-    loop {
-        neth.send_message(asdasd.to_string()).unwrap();
-        asdasd += 1;
-        loop {
-            match neth.read() {
-                Ok(Some(_)) => (),
-                Ok(None) => break,
-                Err(_) => panic!(),
-            }
-        }
-        std::thread::sleep(std::time::Duration::from_millis(5000));
+        tracker.to_socket_addrs().unwrap().collect()
+    );
+
+    if !bot {
+        let wrap = Arc::new(Mutex::new(nethandle));
+        ui::cursive_main(wrap);
+    } else {
+        bot::bot_main(nethandle);
     }
 }
 
@@ -172,6 +173,12 @@ fn create_app<'a, 'b>() -> App<'a, 'b> {
                 .help("Specifies the tracker to connect to")
                 .takes_value(true)
                 .requires_all(&[ARG_JOIN_ROOM, ARG_USERNAME]),
+        ).arg(
+            Arg::with_name(ARG_BOT)
+                .long("bot")
+                .help("Runs the client as a bot (does not take user input and discards user output)")
+                .requires_all(&[ARG_JOIN_ROOM, ARG_USERNAME, ARG_TRACKER])
+                .conflicts_with_all(&[ARG_NEW_ROOM]),
         );
 
     return a;

@@ -1,4 +1,5 @@
 pub mod nethandle;
+pub mod bot;
 mod ktable;
 mod netthread;
 mod kademlia;

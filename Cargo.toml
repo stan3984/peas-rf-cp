@@ -6,12 +6,15 @@ authors = []
 [dependencies]
 log = "^0.4"
 rand = "^0.6"
-flexi_logger = "0.10.1"
+flexi_logger = "=0.10.1"
 serde = "^1.0"
 serde_derive = "^1.0"
 bincode = "^1.0"
 pnet = "^0.21"
 clap = "^2.32"
+pancurses = "0.16.0"
+cursive = "0.10"
+chrono = "0.4.6"
 
 [lib]
 name = "peas_rf_cp"

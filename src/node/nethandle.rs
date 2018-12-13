@@ -57,7 +57,7 @@ impl NetHandle {
             Err(TryRecvError::Empty) => Ok(None),
             Err(TryRecvError::Disconnected) => Err(SendError::Disconnected),
         }
-    }
+}
 
     /// sends `msg` to all other connected nodes.
     /// returns the message struct that was sent
